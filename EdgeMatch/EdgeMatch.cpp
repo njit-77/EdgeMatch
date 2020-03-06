@@ -3,19 +3,88 @@
 
 #include "EdgeMatch.h"
 #include <iostream>
+#include <math.h>
 
 int main()
 {
-    std::cout << "Hello World!\n";
+    EdgeMatch::GetInstance().create_edge_model_path("D:\\Download\\GeoMatch_demo\\Template.jpg",
+        "0d4ed8a0-9a35-42cb-ac77-b06c76ed13c8", 30, 45, 3);
+
+    system("pause");
 }
 
-// 运行程序: Ctrl + F5 或调试 >“开始执行(不调试)”菜单
-// 调试程序: F5 或调试 >“开始调试”菜单
+int EdgeMatch::create_edge_model_path(const char* picPath, const char* modelID, 
+    int minGray, int maxGray, int pryNum)
+{
+    cv::Mat src = cv::imread(picPath, cv::IMREAD_GRAYSCALE);
 
-// 入门使用技巧: 
-//   1. 使用解决方案资源管理器窗口添加/管理文件
-//   2. 使用团队资源管理器窗口连接到源代码管理
-//   3. 使用输出窗口查看生成输出和其他消息
-//   4. 使用错误列表窗口查看错误
-//   5. 转到“项目”>“添加新项”以创建新的代码文件，或转到“项目”>“添加现有项”以将现有代码文件添加到项目
-//   6. 将来，若要再次打开此项目，请转到“文件”>“打开”>“项目”并选择 .sln 文件
+    cv::Mat cannyImg;
+    cv::Canny(src, cannyImg, minGray, maxGray);
+
+    cv::Mat sobelX, sobleY;
+    cv::Sobel(cannyImg, sobelX, CV_32FC1, 1, 0, 3);
+    cv::Sobel(cannyImg, sobleY, CV_32FC1, 0, 1, 3);
+    
+    std::vector<cv::Mat> pryCanny;
+    std::vector<cv::Mat> prySobelX;
+    std::vector<cv::Mat> prySobelY;
+    pryImage(cannyImg, pryCanny, pryNum);
+    pryImage(sobelX, prySobelX, pryNum);
+    pryImage(sobleY, prySobelY, pryNum);
+
+    ModelInfo = new EdgeModelInfo;
+    ModelInfo->MinGray = minGray;
+    ModelInfo->MaxGray = maxGray;
+    ModelInfo->PryNum = pryNum;
+
+    for (size_t i = 0; i < pryNum; i++)
+    {
+        std::vector<EdgeModelBaseInfo> gradData;
+        createGrad(pryCanny[i], prySobelX[i], prySobelY[i], gradData);
+        ModelInfo->EdgeModelBaseInfos.push_back(gradData);
+    }
+
+    return 1;
+}
+
+void EdgeMatch::pryImage(cv::Mat srcImage,std::vector<cv::Mat>& pryImage, int pryNum)
+{
+    pryImage.push_back(srcImage);
+
+    for (size_t i = 1; i < pryNum; i++)
+    {
+        cv::pyrDown(srcImage, srcImage);
+        pryImage.push_back(srcImage);
+    }
+}
+
+void EdgeMatch::createGrad(cv::Mat pryCanny, cv::Mat prySobelX, cv::Mat prySobelY, std::vector<EdgeModelBaseInfo>& gradData)
+{
+    std::vector<std::vector<cv::Point>> contours;
+    cv::findContours(pryCanny, contours, cv::RETR_LIST, cv::CHAIN_APPROX_SIMPLE);
+
+    std::vector<cv::Point> contoursQuery;
+    for (size_t j = 0; j < contours.size(); j++)
+    {
+        contoursQuery.insert(contoursQuery.begin(), contours[j].begin(), contours[j].end());
+    }
+
+    cv::Mat magnitudeImg, angleImg;
+    cv::cartToPolar(prySobelX, prySobelY, magnitudeImg, angleImg);
+
+    for (size_t j = 0; j < contoursQuery.size(); j++)
+    {
+        EdgeModelBaseInfo gradInfo;
+        float grad = magnitudeImg.at<float>(contoursQuery[j]);
+        float angle = angleImg.at<float>(contoursQuery[j]);
+
+        gradInfo.grad_x = cos(angle);
+        gradInfo.grad_y = sin(angle);
+        gradInfo.magnitude = grad;
+        if (cv::abs(grad) < 1e-7)
+            gradInfo.magnitudeN = 1 / grad;
+        gradInfo.contour = contoursQuery[j];
+
+        gradData.push_back(gradInfo);
+    }
+}
