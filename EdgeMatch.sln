@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.29806.167
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "EdgeMatch", "EdgeMatch\EdgeMatch.vcxproj", "{AE2237DB-D37C-44AC-B9FD-E2892582D45F}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{AE2237DB-D37C-44AC-B9FD-E2892582D45F}.Debug|x64.ActiveCfg = Debug|x64
+		{AE2237DB-D37C-44AC-B9FD-E2892582D45F}.Debug|x64.Build.0 = Debug|x64
+		{AE2237DB-D37C-44AC-B9FD-E2892582D45F}.Debug|x86.ActiveCfg = Debug|Win32
+		{AE2237DB-D37C-44AC-B9FD-E2892582D45F}.Debug|x86.Build.0 = Debug|Win32
+		{AE2237DB-D37C-44AC-B9FD-E2892582D45F}.Release|x64.ActiveCfg = Release|x64
+		{AE2237DB-D37C-44AC-B9FD-E2892582D45F}.Release|x64.Build.0 = Release|x64
+		{AE2237DB-D37C-44AC-B9FD-E2892582D45F}.Release|x86.ActiveCfg = Release|Win32
+		{AE2237DB-D37C-44AC-B9FD-E2892582D45F}.Release|x86.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {33E246E9-29EA-42B4-B926-59B02294995D}
+	EndGlobalSection
+EndGlobal
