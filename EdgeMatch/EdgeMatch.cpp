@@ -212,10 +212,29 @@ int EdgeMatch::find_edge_model_path(IN const char* picPath, IN const char* model
 
 			for (float angle = ModelInfo->StartAngle; angle < ModelInfo->EndAngle; angle += step)
 			{
+#ifdef Paraller_Rotate
+				parallel_for_(cv::Range(0, ModelInfo->EdgeModelBaseInfoSize[ModelInfo->PyrNumber - 1]),
+					Paraller_RotateGradInfo(ModelInfo->EdgeModelBaseInfos[ModelInfo->PyrNumber - 1],
+						ModelInfo->EdgeModelBaseInfoSize[ModelInfo->PyrNumber - 1],
+						angle, modelGradX, modelGradY, modelCenterX, modelCenterY));
+#else
 				rotateGradInfo(ModelInfo->EdgeModelBaseInfos[ModelInfo->PyrNumber - 1],
 					ModelInfo->EdgeModelBaseInfoSize[ModelInfo->PyrNumber - 1],
 					angle, modelGradX, modelGradY, modelCenterX, modelCenterY);
+#endif
 
+#ifdef Paraller_Search
+				parallel_for_(cv::Range(center[0], center[2]),
+					Paraller_SearchMatchModel(pyrSobelX[ModelInfo->PyrNumber - 1],
+						pyrSobelY[ModelInfo->PyrNumber - 1],
+						center,
+						ModelInfo->Score,
+						ModelInfo->Greediness,
+						angle,
+						ModelInfo->EdgeModelBaseInfoSize[ModelInfo->PyrNumber - 1],
+						modelGradX, modelGradY, modelCenterX, modelCenterY,
+						searchInfo));
+#else
 				searchMatchModel(pyrSobelX[ModelInfo->PyrNumber - 1],
 					pyrSobelY[ModelInfo->PyrNumber - 1],
 					center,
@@ -225,6 +244,7 @@ int EdgeMatch::find_edge_model_path(IN const char* picPath, IN const char* model
 					ModelInfo->EdgeModelBaseInfoSize[ModelInfo->PyrNumber - 1],
 					modelGradX, modelGradY, modelCenterX, modelCenterY,
 					searchInfo);
+#endif
 			}
 #ifdef DrawContours
 			rotateGradInfo(ModelInfo->EdgeModelBaseInfos[ModelInfo->PyrNumber - 1],
@@ -251,10 +271,29 @@ int EdgeMatch::find_edge_model_path(IN const char* picPath, IN const char* model
 				float endAngle = searchInfo.Angle + step;
 				for (float angle = startAngle; angle < endAngle; angle += step)
 				{
+#ifdef Paraller_Rotate
+					parallel_for_(cv::Range(0, ModelInfo->EdgeModelBaseInfoSize[i]),
+						Paraller_RotateGradInfo(ModelInfo->EdgeModelBaseInfos[i],
+							ModelInfo->EdgeModelBaseInfoSize[i],
+							angle, modelGradX, modelGradY, modelCenterX, modelCenterY));
+#else
 					rotateGradInfo(ModelInfo->EdgeModelBaseInfos[i],
 						ModelInfo->EdgeModelBaseInfoSize[i],
 						angle, modelGradX, modelGradY, modelCenterX, modelCenterY);
+#endif
 
+#ifdef Paraller_Search
+					parallel_for_(cv::Range(center[0], center[2]),
+						Paraller_SearchMatchModel(pyrSobelX[i],
+							pyrSobelY[i],
+							center,
+							ModelInfo->Score,
+							ModelInfo->Greediness,
+							angle,
+							ModelInfo->EdgeModelBaseInfoSize[i],
+							modelGradX, modelGradY, modelCenterX, modelCenterY,
+							searchInfo));
+#else
 					searchMatchModel(pyrSobelX[i],
 						pyrSobelY[i],
 						center,
@@ -264,6 +303,7 @@ int EdgeMatch::find_edge_model_path(IN const char* picPath, IN const char* model
 						ModelInfo->EdgeModelBaseInfoSize[i],
 						modelGradX, modelGradY, modelCenterX, modelCenterY,
 						searchInfo);
+#endif
 				}
 			}
 #ifdef DrawContours

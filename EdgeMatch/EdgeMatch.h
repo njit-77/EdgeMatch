@@ -19,8 +19,9 @@
 #include <vector>
 #include <Windows.h>
 
-
-//#define DrawContours
+#define Paraller_Rotate
+#define Paraller_Search
+#define DrawContours
 #define PyrNum 3
 #define TestCount 10
 
@@ -274,3 +275,170 @@ public:
 	}
 
 };
+
+#ifdef Paraller_Rotate
+
+class Paraller_RotateGradInfo :public cv::ParallelLoopBody
+{
+private:
+	EdgeModelBaseInfo*& modelInfo;
+	int& length;
+	float& angle;
+	float*& modelGradX;
+	float*& modelGradY;
+	float*& modelContourX;
+	float*& modelContourY;
+
+public:
+	Paraller_RotateGradInfo(IN EdgeModelBaseInfo*& _modelInfo,
+		IN int _length, IN float _angle,
+		OUT float*& _modelGradX, OUT float*& _modelGradY,
+		OUT float*& _modelContourX, OUT float*& _modelContourY)
+		: modelInfo(_modelInfo), length(_length), angle(_angle),
+		modelGradX(_modelGradX), modelGradY(_modelGradY),
+		modelContourX(_modelContourX), modelContourY(_modelContourY)
+	{
+		if (modelGradX != nullptr)
+		{
+			delete[]modelGradX;
+			modelGradX = nullptr;
+		}
+		modelGradX = new float[length];
+
+		if (modelGradY != nullptr)
+		{
+			delete[]modelGradY;
+			modelGradY = nullptr;
+		}
+		modelGradY = new float[length];
+
+		if (modelContourX != nullptr)
+		{
+			delete[]modelContourX;
+			modelContourX = nullptr;
+		}
+		modelContourX = new float[length];
+
+		if (modelContourY != nullptr)
+		{
+			delete[]modelContourY;
+			modelContourY = nullptr;
+		}
+		modelContourY = new float[length];
+	}
+
+	virtual void operator()(const cv::Range& r) const
+	{
+		float rotRad = angle * M_PI / 180;
+		float sinA = sin(rotRad);
+		float cosA = cos(rotRad);
+		for (int i = r.start; i != r.end; i++)
+		{
+			modelGradX[i] = modelInfo[i].grad_x * cosA - modelInfo[i].grad_y * sinA;
+			modelGradY[i] = modelInfo[i].grad_y * cosA + modelInfo[i].grad_x * sinA;
+			modelContourX[i] = modelInfo[i].contour.x * cosA - modelInfo[i].contour.y * sinA;
+			modelContourY[i] = modelInfo[i].contour.y * cosA + modelInfo[i].contour.x * sinA;
+		}
+	}
+};
+
+#endif
+
+
+#ifdef Paraller_Search
+
+class Paraller_SearchMatchModel :public cv::ParallelLoopBody
+{
+private:
+	cv::Mat& dstSobleX;
+	cv::Mat& dstSobleY;
+	int*& center;
+	float& minScore;
+	float& greediness;
+	float& angle;
+	int& length;
+	float*& modelGradX;
+	float*& modelGradY;
+	float*& modelContourX;
+	float*& modelContourY;
+	EdgeModelSearchInfo& searchInfo;
+
+public:
+	Paraller_SearchMatchModel(IN cv::Mat& _dstSobleX, IN cv::Mat& _dstSobleY, IN int* _center,
+		IN float _minScore, IN float _greediness, IN float _angle, IN int _length,
+		IN float*& _modelGradX, IN float*& _modelGradY,
+		IN float*& _modelContourX, IN float*& _modelContourY,
+		OUT EdgeModelSearchInfo& _searchInfo)
+		: dstSobleX(_dstSobleX), dstSobleY(_dstSobleY), center(_center),
+		minScore(_minScore), greediness(_greediness), angle(_angle), length(_length),
+		modelGradX(_modelGradX), modelGradY(_modelGradY),
+		modelContourX(_modelContourX), modelContourY(_modelContourY),
+		searchInfo(_searchInfo) {}
+
+	virtual void operator()(const cv::Range& r) const
+	{
+		assert(dstSobleX.size() == dstSobleY.size());
+
+		float NormGreediness = (1 - greediness * minScore) / (1 - greediness) / length;
+		float NormMinScore = minScore / length;
+
+		cv::Mat magnitudeImg, angleImg;
+		cv::cartToPolar(dstSobleX, dstSobleY, magnitudeImg, angleImg);
+		float* pAngleImg = nullptr;
+		if (angleImg.isContinuous())
+		{
+			pAngleImg = (float*)angleImg.ptr();
+		}
+
+		for (size_t y = r.start; y < r.end; y++)
+		{
+			for (size_t x = center[1]; x < center[3]; x++)
+			{
+				float partialScore = 0;
+				float score = 0;
+				int sum = 0;
+
+				for (size_t index = 0; index < length; index++)
+				{
+					int curX = x + modelContourX[index];
+					int curY = y + modelContourY[index];
+
+					if (curX < 0 || curY < 0 || curX > center[3] - 1 || curY > center[2] - 1)
+						continue;
+
+					float rad = 0;
+					if (pAngleImg != nullptr)
+					{
+						rad = pAngleImg[curY * angleImg.cols + curX];
+					}
+					else
+					{
+						rad = angleImg.at<float>(curY, curX);
+					}
+
+					float gx = cos(rad);
+					float gy = sin(rad);
+					if (gx != 0 || gy != 0)
+					{
+						partialScore += (gx * modelGradX[index] + gy * modelGradY[index]);
+
+						sum++;
+						score = partialScore / sum;
+						if (score < (min((minScore - 1) + NormGreediness * sum, NormMinScore * sum)))
+							break;
+					}
+				}
+
+				if (score > searchInfo.Score)
+				{
+					searchInfo.Score = score;
+					searchInfo.Angle = angle;
+					searchInfo.CenterX = x;
+					searchInfo.CenterY = y;
+				}
+			}
+		}
+	}
+};
+
+#endif
