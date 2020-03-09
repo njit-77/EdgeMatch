@@ -17,18 +17,12 @@
 
 #include <guiddef.h>
 #include <vector>
+#include <Windows.h>
 
 
-#define DrawContours
-#define PryNum 3
-
-#define CONVERT_STR_2_GUID(str, guid) do\
-{\
-	sscanf_s(str, "%8x-%4x-%4x-%2x%2x-%2x%2x%2x%2x%2x%2x",\
-	&(guid.Data1),&(guid.Data2),&(guid.Data3),\
-	&(guid.Data4[0]),&(guid.Data4[1]),&(guid.Data4[2]),&(guid.Data4[3]),\
-	&(guid.Data4[4]),&(guid.Data4[5]),&(guid.Data4[6]),&(guid.Data4[7]));\
-}while (0);
+//#define DrawContours
+#define PyrNum 3
+#define TestCount 10
 
 
 struct EdgeModelBaseInfo
@@ -46,7 +40,7 @@ struct EdgeModelBaseInfo
 	float magnitudeN;
 
 	/*边缘点*/
-	cv::Point contour;
+	cv::Point2f contour;
 
 	EdgeModelBaseInfo()
 	{
@@ -54,7 +48,7 @@ struct EdgeModelBaseInfo
 		grad_y = 0;
 		magnitude = 0;
 		magnitudeN = 0;
-		contour = cv::Point(0, 0);
+		contour = cv::Point2f(0, 0);
 	}
 };
 
@@ -64,7 +58,7 @@ struct EdgeModelInfo
 
 	int MinGray;
 	int MaxGray;
-	int PryNumber;
+	int PyrNumber;
 	float Score;
 	float StartAngle;
 	float EndAngle;
@@ -78,7 +72,7 @@ struct EdgeModelInfo
 		ModelID = { 0 };
 		MinGray = 0;
 		MaxGray = 0;
-		PryNumber = PryNum;
+		PyrNumber = PyrNum;
 		Score = 0.5;
 		StartAngle = -45;
 		EndAngle = 45;
@@ -102,7 +96,7 @@ struct EdgeModelInfo
 		}
 		if (EdgeModelBaseInfos != nullptr)
 		{
-			for (size_t i = 0; i < PryNumber; i++)
+			for (size_t i = 0; i < PyrNumber; i++)
 			{
 				delete[] EdgeModelBaseInfos[i];
 				EdgeModelBaseInfos[i] = nullptr;
@@ -111,7 +105,6 @@ struct EdgeModelInfo
 			EdgeModelBaseInfos = nullptr;
 		}
 	}
-
 };
 
 struct EdgeModelSearchInfo
@@ -155,35 +148,24 @@ private:
 
 	/** @brief 构建金字塔模型
 
-		@anchor pryImage
+		@anchor getPyrImage
 
 		@param srcImage 原始图像
-		@param cannyImage canny 金字塔模型
-		@param sobelXImage soble x方向 金字塔模型
-		@param sobelYImage soble y方向 金字塔模型
-	*/
-	void getPryImage(cv::Mat srcImage, std::vector<cv::Mat>& cannyImage, std::vector<cv::Mat>& sobelXImage, std::vector<cv::Mat>& sobelYImage);
-
-	/** @brief 构建金字塔模型
-
-		@anchor pryImage
-
-		@param srcImage 原始图像
-		@param pryImage 金字塔模型
+		@param pyrImage 金字塔模型图像
 		@param pryNum 金字塔层数
 	*/
-	void pryImage(cv::Mat srcImage, std::vector<cv::Mat>& pryImage, int pryNum);
+	void getPyrImage(IN cv::Mat srcImage, IN int pryNum, OUT std::vector<cv::Mat>& pyrImage);
 
 	/** @brief 生成梯度信息
 
 		@anchor createGradInfo
 
-		@param pryCanny canny处理后图像
-		@param prySobelX Sobel X方向处理后图像
-		@param prySobelY Sobel Y方向处理后图像
+		@param pyrImage 原始图像
+		@param pyrSobelX Sobel X方向处理后图像
+		@param pyrSobelY Sobel Y方向处理后图像
 		@param gradData 梯度信息集合
 	*/
-	void createGradInfo(cv::Mat pryCanny, cv::Mat prySobelX, cv::Mat prySobelY, std::vector<EdgeModelBaseInfo>& gradData);
+	void createGradInfo(IN cv::Mat pyrImage, IN cv::Mat pyrSobelX, IN cv::Mat pyrSobelY, OUT std::vector<EdgeModelBaseInfo>& gradData);
 
 	/** @brief 剔除轮廓点
 
@@ -191,7 +173,7 @@ private:
 
 		@param gradData 梯度信息集合
 	*/
-	void deleteContourPoints(std::vector<EdgeModelBaseInfo>& gradData);
+	void deleteContourPoints(IN OUT std::vector<EdgeModelBaseInfo>& gradData);
 
 	/** @brief 归一化轮廓点
 
@@ -199,21 +181,22 @@ private:
 
 		@param gradData 梯度信息集合
 	*/
-	void normalContourPoints(std::vector<EdgeModelBaseInfo>& gradData);
+	void normalContourPoints(IN OUT std::vector<EdgeModelBaseInfo>& gradData);
 
 	/** @brief 旋转模型信息
 
 		@anchor rotateGradInfo
 
-		@param angle 旋转角度
 		@param modelInfo 模型参数
 		@param length 模型参数数量
+		@param angle 旋转角度
 		@param modelGradX 旋转后x方向梯度
 		@param modelGradY 旋转后y方向梯度
 		@param modelCenterX 旋转后 轮廓点x
 		@param modelCenterY 旋转后 轮廓点y
 	*/
-	void rotateGradInfo(float angle, EdgeModelBaseInfo*& modelInfo, int length, float*& modelGradX, float*& modelGradY, float*& modelContourX, float*& modelContourY);
+	void rotateGradInfo(IN EdgeModelBaseInfo*& modelInfo, IN int length, IN float angle,
+		OUT float*& modelGradX, OUT float*& modelGradY, OUT float*& modelContourX, OUT float*& modelContourY);
 
 	/** @brief 搜索最优模版信息
 
@@ -221,6 +204,7 @@ private:
 
 		@param dstSobleX 目标Sobel x方向图像
 		@param dstSobleY 目标Sobel y方向图像
+		@param center 搜索范围
 		@param minScore 最小相似度
 		@param greediness 贪婪度
 		@param angle 模版旋转角度
@@ -231,12 +215,22 @@ private:
 		@param modelContourY 模版轮廓点y坐标
 		@param searchInfo 搜索结果
 	*/
-	void searchMatchModel(cv::Mat& dstSobleX, cv::Mat& dstSobleY,
-		float minScore, float greediness, float angle, int length,
-		float*& modelGradX, float*& modelGradY, float*& modelContourX, float*& modelContourY,
-		EdgeModelSearchInfo& searchInfo);
+	void searchMatchModel(IN cv::Mat& dstSobleX, IN cv::Mat& dstSobleY, IN int* center,
+		IN float minScore, IN float greediness, IN float angle, IN int length,
+		IN float*& modelGradX, IN float*& modelGradY, IN float*& modelContourX, IN float*& modelContourY,
+		OUT EdgeModelSearchInfo& searchInfo);
 
-	void drawContours(cv::Mat& dst, int length, float*& modelContourX, float*& modelContourY, EdgeModelSearchInfo& searchInfo);
+	/** @brief 绘制轮廓信息
+
+		@anchor drawContours
+
+		@param img 图像
+		@param modelContourX 轮廓点x坐标集合
+		@param modelContourY 轮廓点y坐标集合
+		@param length 轮廓点数量
+		@param searchInfo 搜索结果
+	*/
+	void drawContours(IN cv::Mat& img, IN float*& modelContourX, IN float*& modelContourY, IN int length, IN EdgeModelSearchInfo& searchInfo);
 
 public:
 
@@ -250,15 +244,15 @@ public:
 		@param modelID 模型ID
 		@param minGray 最下灰度值
 		@param maxGray 最大灰度值
-		@param pryNum 金字塔层数
+		@param pyrNum 金字塔层数
 		@param score 最小相似度
 		@param startAngle 搜索起始角度
 		@param endAngle 搜索终止角度
 		@param stepAngle 搜索步进角度
 		@param greediness 贪婪值
 	*/
-	int create_edge_model_path(const char* picPath, const char* modelID, int minGray, int maxGray, int pryNum,
-		float score, float startAngle, float endAngle, float stepAngle, float greediness);
+	int create_edge_model_path(IN const char* picPath, IN const char* modelID, IN int minGray, IN int maxGray, IN int pyrNum,
+		IN float score, IN float startAngle, IN float endAngle, IN float stepAngle, IN float greediness);
 
 	/** @brief 基于图片查找模版
 
@@ -269,7 +263,7 @@ public:
 		@param picPath 图片路径
 		@param modelID 模型ID
 	*/
-	int find_edge_model_path(const char* picPath, const char* modelID);
+	int find_edge_model_path(IN const char* picPath, IN const char* modelID);
 
 public:
 
