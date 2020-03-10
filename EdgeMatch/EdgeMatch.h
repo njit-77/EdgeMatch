@@ -18,12 +18,13 @@
 #include <guiddef.h>
 #include <vector>
 #include <Windows.h>
+#include <iostream>
 
 #define Paraller_Rotate
 #define Paraller_Search
-#define DrawContours
+//#define DrawContours
 #define PyrNum 3
-#define TestCount 10
+#define TestCount 1
 
 
 struct EdgeModelBaseInfo
@@ -347,6 +348,8 @@ public:
 
 #ifdef Paraller_Search
 
+#include <thread>
+
 class Paraller_SearchMatchModel :public cv::ParallelLoopBody
 {
 private:
@@ -382,12 +385,12 @@ public:
 		float NormGreediness = (1 - greediness * minScore) / (1 - greediness) / length;
 		float NormMinScore = minScore / length;
 
-		cv::Mat magnitudeImg, angleImg;
-		cv::cartToPolar(dstSobleX, dstSobleY, magnitudeImg, angleImg);
-		float* pAngleImg = nullptr;
-		if (angleImg.isContinuous())
+		float* pSobleX = nullptr;
+		float* pSobleY = nullptr;
+		if (dstSobleX.isContinuous() && dstSobleY.isContinuous())
 		{
-			pAngleImg = (float*)angleImg.ptr();
+			pSobleX = (float*)dstSobleX.ptr();
+			pSobleY = (float*)dstSobleY.ptr();
 		}
 
 		for (size_t y = r.start; y < r.end; y++)
@@ -403,24 +406,28 @@ public:
 					int curX = x + modelContourX[index];
 					int curY = y + modelContourY[index];
 
-					if (curX < 0 || curY < 0 || curX > center[3] - 1 || curY > center[2] - 1)
+					if (curX < 0 || curY < 0 || curX > dstSobleX.cols - 1 || curY > dstSobleX.rows - 1)
 						continue;
 
-					float rad = 0;
-					if (pAngleImg != nullptr)
+					float gx = 0;
+					float gy = 0;
+					if (pSobleX != nullptr)
 					{
-						rad = pAngleImg[curY * angleImg.cols + curX];
+						gx = pSobleX[curY * dstSobleX.cols + curX];
+						gy = pSobleY[curY * dstSobleX.cols + curX];
 					}
 					else
 					{
-						rad = angleImg.at<float>(curY, curX);
+						gx = dstSobleX.at<float>(curY, curX);
+						gy = dstSobleY.at<float>(curY, curX);
 					}
 
-					float gx = cos(rad);
-					float gy = sin(rad);
 					if (gx != 0 || gy != 0)
 					{
-						partialScore += (gx * modelGradX[index] + gy * modelGradY[index]);
+						float grad = sqrt(gx * gx + gy * gy);
+						float n_gx = gx / grad;
+						float n_gy = gy / grad;
+						partialScore += (n_gx * modelGradX[index] + n_gy * modelGradY[index]);
 
 						sum++;
 						score = partialScore / sum;
@@ -431,6 +438,7 @@ public:
 
 				if (score > searchInfo.Score)
 				{
+					//std::cout << "OldScore = " << searchInfo.Score << ", NewScore = " << score << ", ThreadID = " << std::this_thread::get_id() << std::endl;
 					searchInfo.Score = score;
 					searchInfo.Angle = angle;
 					searchInfo.CenterX = x;
