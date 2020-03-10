@@ -4,7 +4,6 @@
 #define _USE_MATH_DEFINES
 
 #include "EdgeMatch.h"
-#include <iostream>
 #include <math.h>
 #include <map>
 
@@ -20,8 +19,8 @@ int main()
 	QueryPerformanceCounter(&nBeginTime);
 	for (size_t i = 0; i < TestCount; i++)
 	{
-		EdgeMatch::GetInstance().create_edge_model_path("D:\\Download\\GeoMatch_demo\\Template.jpg",
-			"0d4ed8a0-9a35-42cb-ac77-b06c76ed13c8", 15, 30, 3, 0.5, -45, 45, 1, 0.9);
+		EdgeMatch::GetInstance().create_edge_model_path("template.jpg",
+			"0d4ed8a0-9a35-42cb-ac77-b06c76ed13c8", 15, 30, 3, 0.8, -45, 45, 1, 0.8);
 	}
 	QueryPerformanceCounter(&nEndTime);
 	time = (1000.0 / TestCount) * (nEndTime.QuadPart - nBeginTime.QuadPart) / (double)nFreq.QuadPart;
@@ -31,7 +30,13 @@ int main()
 	QueryPerformanceCounter(&nBeginTime);
 	for (size_t i = 0; i < TestCount; i++)
 	{
-		EdgeMatch::GetInstance().find_edge_model_path("D:\\Download\\GeoMatch_demo\\Search2.jpg",
+		EdgeMatch::GetInstance().find_edge_model_path("search1.jpg",
+			"0d4ed8a0-9a35-42cb-ac77-b06c76ed13c8");
+
+		EdgeMatch::GetInstance().find_edge_model_path("search2.jpg",
+			"0d4ed8a0-9a35-42cb-ac77-b06c76ed13c8");
+
+		EdgeMatch::GetInstance().find_edge_model_path("search3.jpg",
 			"0d4ed8a0-9a35-42cb-ac77-b06c76ed13c8");
 	}
 	QueryPerformanceCounter(&nEndTime);
@@ -108,18 +113,34 @@ void EdgeMatch::createGradInfo(IN cv::Mat pyrImage, IN cv::Mat pyrSobelX, IN cv:
 		contoursQuery.insert(contoursQuery.end(), contours[j].begin(), contours[j].end());
 	}
 
-	cv::Mat magnitudeImg, angleImg;
-	cv::cartToPolar(pyrSobelX, pyrSobelY, magnitudeImg, angleImg);
-
+	float* pSobleX = nullptr;
+	float* pSobleY = nullptr;
+	if (pyrSobelX.isContinuous() && pyrSobelY.isContinuous())
+	{
+		pSobleX = (float*)pyrSobelX.ptr();
+		pSobleY = (float*)pyrSobelY.ptr();
+	}
 	for (size_t j = 0; j < contoursQuery.size(); j++)
 	{
 		EdgeModelBaseInfo gradInfo;
 
-		float grad = magnitudeImg.at<float>(contoursQuery[j]);
-		float rad = angleImg.at<float>(contoursQuery[j]);
+		float gx = 0;
+		float gy = 0;
+		if (pSobleX != nullptr)
+		{
+			int index = contoursQuery[j].y * pyrSobelX.cols + contoursQuery[j].x;
+			gx = pSobleX[index];
+			gy = pSobleY[index];
+		}
+		else
+		{
+			gx = pyrSobelX.at<float>(contoursQuery[j]);
+			gy = pyrSobelY.at<float>(contoursQuery[j]);
+		}
 
-		gradInfo.grad_x = cos(rad);
-		gradInfo.grad_y = sin(rad);
+		float grad = sqrt(gx * gx + gy * gy);
+		gradInfo.grad_x = gx / grad;
+		gradInfo.grad_y = gy / grad;
 		gradInfo.magnitude = grad;
 		if (cv::abs(grad) > 1e-7)
 			gradInfo.magnitudeN = 1 / grad;
@@ -315,6 +336,12 @@ int EdgeMatch::find_edge_model_path(IN const char* picPath, IN const char* model
 				modelCenterX, modelCenterY,
 				ModelInfo->EdgeModelBaseInfoSize[0],
 				searchInfo);
+			char buff[MAXBYTE];
+			SYSTEMTIME sys;
+			GetLocalTime(&sys);
+			sprintf_s(buff, "%04d-%02d-%02d-%02d-%02d-%02d-%03d.png",
+				sys.wYear, sys.wMonth, sys.wDay, sys.wHour, sys.wMinute, sys.wSecond, sys.wMilliseconds);
+			cv::imwrite(buff, img);
 #endif
 		}
 		if (modelGradX != nullptr)
@@ -399,12 +426,12 @@ void EdgeMatch::searchMatchModel(IN cv::Mat& dstSobleX, IN cv::Mat& dstSobleY, I
 	float NormGreediness = (1 - greediness * minScore) / (1 - greediness) / length;
 	float NormMinScore = minScore / length;
 
-	cv::Mat magnitudeImg, angleImg;
-	cv::cartToPolar(dstSobleX, dstSobleY, magnitudeImg, angleImg);
-	float* pAngleImg = nullptr;
-	if (angleImg.isContinuous())
+	float* pSobleX = nullptr;
+	float* pSobleY = nullptr;
+	if (dstSobleX.isContinuous() && dstSobleY.isContinuous())
 	{
-		pAngleImg = (float*)angleImg.ptr();
+		pSobleX = (float*)dstSobleX.ptr();
+		pSobleY = (float*)dstSobleY.ptr();
 	}
 
 	for (size_t y = center[0]; y < center[2]; y++)
@@ -420,24 +447,28 @@ void EdgeMatch::searchMatchModel(IN cv::Mat& dstSobleX, IN cv::Mat& dstSobleY, I
 				int curX = x + modelContourX[index];
 				int curY = y + modelContourY[index];
 
-				if (curX < 0 || curY < 0 || curX > center[3] - 1 || curY > center[2] - 1)
+				if (curX < 0 || curY < 0 || curX > dstSobleX.cols - 1 || curY > dstSobleX.rows - 1)
 					continue;
 
-				float rad = 0;
-				if (pAngleImg != nullptr)
+				float gx = 0;
+				float gy = 0;
+				if (pSobleX != nullptr)
 				{
-					rad = pAngleImg[curY * angleImg.cols + curX];
+					gx = pSobleX[curY * dstSobleX.cols + curX];
+					gy = pSobleY[curY * dstSobleX.cols + curX];
 				}
 				else
 				{
-					rad = angleImg.at<float>(curY, curX);
+					gx = dstSobleX.at<float>(curY, curX);
+					gy = dstSobleY.at<float>(curY, curX);
 				}
 
-				float gx = cos(rad);
-				float gy = sin(rad);
 				if (gx != 0 || gy != 0)
 				{
-					partialScore += (gx * modelGradX[index] + gy * modelGradY[index]);
+					float grad = sqrt(gx * gx + gy * gy);
+					float n_gx = gx / grad;
+					float n_gy = gy / grad;
+					partialScore += (n_gx * modelGradX[index] + n_gy * modelGradY[index]);
 
 					sum++;
 					score = partialScore / sum;
@@ -460,10 +491,10 @@ void EdgeMatch::searchMatchModel(IN cv::Mat& dstSobleX, IN cv::Mat& dstSobleY, I
 void EdgeMatch::drawContours(IN cv::Mat& img, IN float*& modelContourX, IN float*& modelContourY, IN int length, IN EdgeModelSearchInfo& searchInfo)
 {
 	cv::cvtColor(img, img, cv::COLOR_GRAY2RGB);
-	cv::Scalar color = cv::Scalar(255, 0, 0);
+	cv::Scalar color = cv::Scalar(0, 0, 255);
 	for (size_t i = 0; i < length; i++)
 	{
 		cv::Point point = cv::Point(searchInfo.CenterX + modelContourX[i], searchInfo.CenterY + modelContourY[i]);
-		cv::line(img, point, point, color);
+		cv::line(img, point, point, color, 3, cv::LINE_AA);
 	}
 }
