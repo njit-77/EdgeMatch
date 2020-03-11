@@ -23,7 +23,7 @@
 #define Paraller_Rotate
 #define Paraller_Search
 //#define DrawContours
-#define PyrNum 3
+#define PyrNum 4
 #define TestCount 1
 
 
@@ -366,6 +366,7 @@ private:
 	float*& modelContourY;
 	EdgeModelSearchInfo& searchInfo;
 
+
 public:
 	Paraller_SearchMatchModel(IN cv::Mat& _dstSobleX, IN cv::Mat& _dstSobleY, IN int* _center,
 		IN float _minScore, IN float _greediness, IN float _angle, IN int _length,
@@ -403,6 +404,7 @@ public:
 
 				for (size_t index = 0; index < length; index++)
 				{
+					sum++;
 					int curX = x + modelContourX[index];
 					int curY = y + modelContourY[index];
 
@@ -428,21 +430,26 @@ public:
 						float n_gx = gx / grad;
 						float n_gy = gy / grad;
 						partialScore += (n_gx * modelGradX[index] + n_gy * modelGradY[index]);
-
-						sum++;
+						
 						score = partialScore / sum;
-						if (score < (min((minScore - 1) + NormGreediness * sum, NormMinScore * sum)))
+						if (score < NormMinScore * (index + 1))
 							break;
+						/*if (score < (min((minScore - 1) + NormGreediness * sum, NormMinScore * sum)))
+							break;*/
 					}
 				}
 
 				if (score > searchInfo.Score)
 				{
-					//std::cout << "OldScore = " << searchInfo.Score << ", NewScore = " << score << ", ThreadID = " << std::this_thread::get_id() << std::endl;
-					searchInfo.Score = score;
-					searchInfo.Angle = angle;
-					searchInfo.CenterX = x;
-					searchInfo.CenterY = y;
+					static std::mutex mtx;
+					std::lock_guard<std::mutex> lock(mtx);
+					if (score > searchInfo.Score)
+					{
+						searchInfo.Score = score;
+						searchInfo.Angle = angle;
+						searchInfo.CenterX = x;
+						searchInfo.CenterY = y;
+					}
 				}
 			}
 		}
