@@ -19,7 +19,7 @@ int main()
 	QueryPerformanceCounter(&nBeginTime);
 	for (size_t i = 0; i < TestCount; i++)
 	{
-		EdgeMatch::GetInstance().create_edge_model_path("D:\\Download\\template.jpg",
+		EdgeMatch::GetInstance().create_edge_model_path("template.jpg",
 			"0d4ed8a0-9a35-42cb-ac77-b06c76ed13c8", 15, 30, 3, 0.8, -45, 45, 1, 0.8);
 	}
 	QueryPerformanceCounter(&nEndTime);
@@ -30,7 +30,7 @@ int main()
 	QueryPerformanceCounter(&nBeginTime);
 	for (size_t i = 0; i < TestCount; i++)
 	{
-		EdgeMatch::GetInstance().find_edge_model_path("D:\\Download\\search.jpg",
+		EdgeMatch::GetInstance().find_edge_model_path("search.jpg",
 			"0d4ed8a0-9a35-42cb-ac77-b06c76ed13c8");
 	}
 	QueryPerformanceCounter(&nEndTime);
