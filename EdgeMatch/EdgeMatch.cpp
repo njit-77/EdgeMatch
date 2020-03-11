@@ -19,7 +19,7 @@ int main()
 	QueryPerformanceCounter(&nBeginTime);
 	for (size_t i = 0; i < TestCount; i++)
 	{
-		EdgeMatch::GetInstance().create_edge_model_path("template.jpg",
+		EdgeMatch::GetInstance().create_edge_model_path("D:\\Download\\template.jpg",
 			"0d4ed8a0-9a35-42cb-ac77-b06c76ed13c8", 15, 30, 3, 0.8, -45, 45, 1, 0.8);
 	}
 	QueryPerformanceCounter(&nEndTime);
@@ -30,13 +30,7 @@ int main()
 	QueryPerformanceCounter(&nBeginTime);
 	for (size_t i = 0; i < TestCount; i++)
 	{
-		EdgeMatch::GetInstance().find_edge_model_path("search1.jpg",
-			"0d4ed8a0-9a35-42cb-ac77-b06c76ed13c8");
-
-		EdgeMatch::GetInstance().find_edge_model_path("search2.jpg",
-			"0d4ed8a0-9a35-42cb-ac77-b06c76ed13c8");
-
-		EdgeMatch::GetInstance().find_edge_model_path("search3.jpg",
+		EdgeMatch::GetInstance().find_edge_model_path("D:\\Download\\search.jpg",
 			"0d4ed8a0-9a35-42cb-ac77-b06c76ed13c8");
 	}
 	QueryPerformanceCounter(&nEndTime);
@@ -55,7 +49,7 @@ int EdgeMatch::create_edge_model_path(IN const char* picPath, IN const char* mod
 	ModelInfo->MaxGray = maxGray;
 	ModelInfo->PyrNumber = pyrNum;
 
-	cv::Mat src = cv::imread(picPath, cv::IMREAD_GRAYSCALE);
+	cv::Mat src = cv::imread(picPath, cv::IMREAD_GRAYSCALE);	
 	cv::Mat sobelX, sobleY;
 	cv::Sobel(src, sobelX, CV_32FC1, 1, 0, 3);
 	cv::Sobel(src, sobleY, CV_32FC1, 0, 1, 3);
@@ -219,10 +213,7 @@ int EdgeMatch::find_edge_model_path(IN const char* picPath, IN const char* model
 
 		if (abs(ModelInfo->StepAngle) < 1e-7)ModelInfo->StepAngle = 1;
 
-		int* center = new int[4]
-		{
-			0, 0,pyrSobelX[ModelInfo->PyrNumber - 1].rows,pyrSobelX[ModelInfo->PyrNumber - 1].cols
-		};
+		int center[] = { 0, 0, pyrSobelX[ModelInfo->PyrNumber - 1].rows, pyrSobelX[ModelInfo->PyrNumber - 1].cols };
 		float* modelGradX = nullptr;
 		float* modelGradY = nullptr;
 		float* modelCenterX = nullptr;
@@ -327,7 +318,7 @@ int EdgeMatch::find_edge_model_path(IN const char* picPath, IN const char* model
 #endif
 				}
 			}
-#ifdef DrawContours
+			//#ifdef DrawContours
 			rotateGradInfo(ModelInfo->EdgeModelBaseInfos[0],
 				ModelInfo->EdgeModelBaseInfoSize[0],
 				searchInfo.Angle, modelGradX, modelGradY, modelCenterX, modelCenterY);
@@ -342,7 +333,7 @@ int EdgeMatch::find_edge_model_path(IN const char* picPath, IN const char* model
 			sprintf_s(buff, "%04d-%02d-%02d-%02d-%02d-%02d-%03d.png",
 				sys.wYear, sys.wMonth, sys.wDay, sys.wHour, sys.wMinute, sys.wSecond, sys.wMilliseconds);
 			cv::imwrite(buff, img);
-#endif
+			//#endif
 		}
 		if (modelGradX != nullptr)
 		{
@@ -444,6 +435,7 @@ void EdgeMatch::searchMatchModel(IN cv::Mat& dstSobleX, IN cv::Mat& dstSobleY, I
 
 			for (size_t index = 0; index < length; index++)
 			{
+				sum++;
 				int curX = x + modelContourX[index];
 				int curY = y + modelContourY[index];
 
@@ -469,11 +461,12 @@ void EdgeMatch::searchMatchModel(IN cv::Mat& dstSobleX, IN cv::Mat& dstSobleY, I
 					float n_gx = gx / grad;
 					float n_gy = gy / grad;
 					partialScore += (n_gx * modelGradX[index] + n_gy * modelGradY[index]);
-
-					sum++;
+					
 					score = partialScore / sum;
-					if (score < (min((minScore - 1) + NormGreediness * sum, NormMinScore * sum)))
+					if (score < NormMinScore * (index + 1))
 						break;
+					//if (score < (min((minScore - 1) + NormGreediness * sum, NormMinScore * sum)))
+					//	break;
 				}
 			}
 
