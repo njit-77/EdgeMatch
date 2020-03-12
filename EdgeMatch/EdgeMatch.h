@@ -20,10 +20,11 @@
 #include <Windows.h>
 #include <iostream>
 
-#define Paraller_Rotate
-#define Paraller_Search
+//#define Paraller_Rotate
+//#define Paraller_Search
 //#define DrawContours
-#define PyrNum 4
+#define SSE
+#define PyrNum 3
 #define TestCount 1
 
 
@@ -197,7 +198,7 @@ private:
 		@param modelCenterX 旋转后 轮廓点x
 		@param modelCenterY 旋转后 轮廓点y
 	*/
-	void rotateGradInfo(IN EdgeModelBaseInfo*& modelInfo, IN int length, IN float angle,
+	void rotateGradInfo(IN EdgeModelBaseInfo*& modelInfo, IN uint length, IN float angle,
 		OUT float*& modelGradX, OUT float*& modelGradY, OUT float*& modelContourX, OUT float*& modelContourY);
 
 	/** @brief 搜索最优模版信息
@@ -217,8 +218,8 @@ private:
 		@param modelContourY 模版轮廓点y坐标
 		@param searchInfo 搜索结果
 	*/
-	void searchMatchModel(IN cv::Mat& dstSobleX, IN cv::Mat& dstSobleY, IN int* center,
-		IN float minScore, IN float greediness, IN float angle, IN int length,
+	void searchMatchModel(IN cv::Mat& dstSobleX, IN cv::Mat& dstSobleY, IN uint* center,
+		IN float minScore, IN float greediness, IN float angle, IN uint length,
 		IN float*& modelGradX, IN float*& modelGradY, IN float*& modelContourX, IN float*& modelContourY,
 		OUT EdgeModelSearchInfo& searchInfo);
 
@@ -283,7 +284,7 @@ class Paraller_RotateGradInfo :public cv::ParallelLoopBody
 {
 private:
 	EdgeModelBaseInfo*& modelInfo;
-	int& length;
+	uint& length;
 	float& angle;
 	float*& modelGradX;
 	float*& modelGradY;
@@ -292,7 +293,7 @@ private:
 
 public:
 	Paraller_RotateGradInfo(IN EdgeModelBaseInfo*& _modelInfo,
-		IN int _length, IN float _angle,
+		IN uint _length, IN float _angle,
 		OUT float*& _modelGradX, OUT float*& _modelGradY,
 		OUT float*& _modelContourX, OUT float*& _modelContourY)
 		: modelInfo(_modelInfo), length(_length), angle(_angle),
@@ -355,11 +356,11 @@ class Paraller_SearchMatchModel :public cv::ParallelLoopBody
 private:
 	cv::Mat& dstSobleX;
 	cv::Mat& dstSobleY;
-	int*& center;
+	uint*& center;
 	float& minScore;
 	float& greediness;
 	float& angle;
-	int& length;
+	uint& length;
 	float*& modelGradX;
 	float*& modelGradY;
 	float*& modelContourX;
@@ -368,8 +369,8 @@ private:
 
 
 public:
-	Paraller_SearchMatchModel(IN cv::Mat& _dstSobleX, IN cv::Mat& _dstSobleY, IN int* _center,
-		IN float _minScore, IN float _greediness, IN float _angle, IN int _length,
+	Paraller_SearchMatchModel(IN cv::Mat& _dstSobleX, IN cv::Mat& _dstSobleY, IN uint* _center,
+		IN float _minScore, IN float _greediness, IN float _angle, IN uint _length,
 		IN float*& _modelGradX, IN float*& _modelGradY,
 		IN float*& _modelContourX, IN float*& _modelContourY,
 		OUT EdgeModelSearchInfo& _searchInfo)
