@@ -11,7 +11,6 @@
 
 int main()
 {
-	const char* str = "D:\\Project\\Git\\EdgeMatch\\bin\\x64\\Release\\";
 	double time = 0;
 	LARGE_INTEGER nFreq;
 	LARGE_INTEGER nBeginTime;
@@ -20,7 +19,7 @@ int main()
 	QueryPerformanceCounter(&nBeginTime);
 	for (size_t i = 0; i < TestCount; i++)
 	{
-		EdgeMatch::GetInstance().create_edge_model_path("D:\\Project\\Git\\EdgeMatch\\bin\\x64\\Release\\template.jpg",
+		EdgeMatch::GetInstance().create_edge_model_path("D:\\Download\\边缘匹配\\template.jpg",
 			"0d4ed8a0-9a35-42cb-ac77-b06c76ed13c8", 15, 30, 3, 0.5, -45, 45, 1, 0.9);
 	}
 	QueryPerformanceCounter(&nEndTime);
@@ -31,7 +30,7 @@ int main()
 	QueryPerformanceCounter(&nBeginTime);
 	for (size_t i = 0; i < TestCount; i++)
 	{
-		EdgeMatch::GetInstance().find_edge_model_path("D:\\Project\\Git\\EdgeMatch\\bin\\x64\\Release\\search1.jpg",
+		EdgeMatch::GetInstance().find_edge_model_path("D:\\Download\\边缘匹配\\search.jpg",
 			"0d4ed8a0-9a35-42cb-ac77-b06c76ed13c8");
 	}
 	QueryPerformanceCounter(&nEndTime);
@@ -317,7 +316,7 @@ int EdgeMatch::find_edge_model_path(IN const char* picPath, IN const char* model
 #endif
 				}
 			}
-#ifdef DrawContours
+#ifdef SavePNG
 			rotateGradInfo(ModelInfo->EdgeModelBaseInfos[0],
 				ModelInfo->EdgeModelBaseInfoSize[0],
 				searchInfo.Angle, modelGradX, modelGradY, modelCenterX, modelCenterY);
@@ -398,60 +397,52 @@ void EdgeMatch::rotateGradInfo(IN EdgeModelBaseInfo*& modelInfo, IN uint length,
 	float cosA = cos(rotRad);
 
 #ifdef SSE
-	int count = length / 4;
-	int count2 = length & 3;
+	__m256 _sinA = _mm256_set1_ps(sinA);
+	__m256 _cosA = _mm256_set1_ps(cosA);
 
-	__m128 _sinA = _mm_set_ps1(sinA);
-	__m128 _cosA = _mm_set_ps1(cosA);
+	__m256 grad_x = _mm256_set1_ps(0.0f);
+	__m256 grad_y = _mm256_set1_ps(0.0f);
+	__m256 contour_x = _mm256_set1_ps(0.0f);
+	__m256 contour_y = _mm256_set1_ps(0.0f);
 
-	__m128 grad_x = _mm_set_ps1(0.0f);
-	__m128 grad_y = _mm_set_ps1(0.0f);
-	__m128 contour_x = _mm_set_ps1(0.0f);
-	__m128 contour_y = _mm_set_ps1(0.0f);
+	__m256 _grad_x = _mm256_set1_ps(0.0f);
+	__m256 _grad_y = _mm256_set1_ps(0.0f);
+	__m256 _contour_x = _mm256_set1_ps(0.0f);
+	__m256 _contour_y = _mm256_set1_ps(0.0f);
 
-	__m128 _grad_x = _mm_set_ps1(0.0f);
-	__m128 _grad_y = _mm_set_ps1(0.0f);
-	__m128 _contour_x = _mm_set_ps1(0.0f);
-	__m128 _contour_y = _mm_set_ps1(0.0f);
-
-	for (uint i = 0; i < length - count2; i += 4)
+	int count = length / SSEStep;
+	int count2 = length & (SSEStep - 1);
+	for (uint i = 0; i < length - count2; i += SSEStep)
 	{
-		grad_x = _mm_set_ps(modelInfo[i + 3].grad_x,
-			modelInfo[i + 2].grad_x, modelInfo[i + 1].grad_x, modelInfo[i].grad_x);
+		grad_x = _mm256_set_ps(modelInfo[i + 7].grad_x, modelInfo[i + 6].grad_x,
+			modelInfo[i + 5].grad_x, modelInfo[i + 4].grad_x,
+			modelInfo[i + 3].grad_x, modelInfo[i + 2].grad_x,
+			modelInfo[i + 1].grad_x, modelInfo[i].grad_x);
 
-		grad_y = _mm_set_ps(modelInfo[i + 3].grad_y,
-			modelInfo[i + 2].grad_y, modelInfo[i + 1].grad_y, modelInfo[i].grad_y);
+		grad_y = _mm256_set_ps(modelInfo[i + 7].grad_y, modelInfo[i + 6].grad_y,
+			modelInfo[i + 5].grad_y, modelInfo[i + 4].grad_y,
+			modelInfo[i + 3].grad_y, modelInfo[i + 2].grad_y,
+			modelInfo[i + 1].grad_y, modelInfo[i].grad_y);
 
-		contour_x = _mm_set_ps(modelInfo[i + 3].contour.x,
-			modelInfo[i + 2].contour.x, modelInfo[i + 1].contour.x, modelInfo[i].contour.x);
+		contour_x = _mm256_set_ps(modelInfo[i + 7].contour.x, modelInfo[i + 6].contour.x,
+			modelInfo[i + 5].contour.x, modelInfo[i + 4].contour.x,
+			modelInfo[i + 3].contour.x, modelInfo[i + 2].contour.x,
+			modelInfo[i + 1].contour.x, modelInfo[i].contour.x);
 
-		contour_y = _mm_set_ps(modelInfo[i + 3].contour.y,
-			modelInfo[i + 2].contour.y, modelInfo[i + 1].contour.y, modelInfo[i].contour.y);
+		contour_y = _mm256_set_ps(modelInfo[i + 7].contour.y, modelInfo[i + 6].contour.y,
+			modelInfo[i + 5].contour.y, modelInfo[i + 4].contour.y,
+			modelInfo[i + 3].contour.y, modelInfo[i + 2].contour.y,
+			modelInfo[i + 1].contour.y, modelInfo[i].contour.y);
 
-		_grad_x = _mm_sub_ps(_mm_mul_ps(grad_x, _cosA), _mm_mul_ps(grad_y, _sinA));
-		_grad_y = _mm_add_ps(_mm_mul_ps(grad_y, _cosA), _mm_mul_ps(grad_x, _sinA));
-		_contour_x = _mm_sub_ps(_mm_mul_ps(contour_x, _cosA), _mm_mul_ps(contour_y, _sinA));
-		_contour_y = _mm_add_ps(_mm_mul_ps(contour_y, _cosA), _mm_mul_ps(contour_x, _sinA));
+		_grad_x = _mm256_sub_ps(_mm256_mul_ps(grad_x, _cosA), _mm256_mul_ps(grad_y, _sinA));
+		_grad_y = _mm256_add_ps(_mm256_mul_ps(grad_y, _cosA), _mm256_mul_ps(grad_x, _sinA));
+		_contour_x = _mm256_sub_ps(_mm256_mul_ps(contour_x, _cosA), _mm256_mul_ps(contour_y, _sinA));
+		_contour_y = _mm256_add_ps(_mm256_mul_ps(contour_y, _cosA), _mm256_mul_ps(contour_x, _sinA));
 
-		modelGradX[i] = _grad_x.m128_f32[0];
-		modelGradX[i + 1] = _grad_x.m128_f32[1];
-		modelGradX[i + 2] = _grad_x.m128_f32[2];
-		modelGradX[i + 3] = _grad_x.m128_f32[3];
-
-		modelGradY[i] = _grad_y.m128_f32[0];
-		modelGradY[i + 1] = _grad_y.m128_f32[1];
-		modelGradY[i + 2] = _grad_y.m128_f32[2];
-		modelGradY[i + 3] = _grad_y.m128_f32[3];
-
-		modelContourX[i] = _contour_x.m128_f32[0];
-		modelContourX[i + 1] = _contour_x.m128_f32[1];
-		modelContourX[i + 2] = _contour_x.m128_f32[2];
-		modelContourX[i + 3] = _contour_x.m128_f32[3];
-
-		modelContourY[i] = _contour_y.m128_f32[0];
-		modelContourY[i + 1] = _contour_y.m128_f32[1];
-		modelContourY[i + 2] = _contour_y.m128_f32[2];
-		modelContourY[i + 3] = _contour_y.m128_f32[3];
+		_mm256_store_ps(modelGradX + i, _grad_x);
+		_mm256_store_ps(modelGradY + i, _grad_y);
+		_mm256_store_ps(modelContourX + i, _contour_x);
+		_mm256_store_ps(modelContourY + i, _contour_y);
 	}
 	for (uint i = length - count2; i < length; i++)
 	{
@@ -497,69 +488,57 @@ void EdgeMatch::searchMatchModel(IN cv::Mat& dstSobleX, IN cv::Mat& dstSobleY, I
 			float score = 0;
 			uint sum = 0;
 
-#ifdef SSE
-			int count = length / 4;
-			int count2 = length & 3;
+#ifdef SSE			
+			__m256 _x = _mm256_set1_ps(x);
+			__m256 _y = _mm256_set1_ps(y);
+			__m256i _curX = _mm256_setzero_si256();
+			__m256i _curY = _mm256_setzero_si256();
+			__m256 _gx = _mm256_set1_ps(0.0f);
+			__m256 _gy = _mm256_set1_ps(0.0f);
 
-			__m128 _x = _mm_set_ps1(x);
-			__m128 _y = _mm_set_ps1(y);
-			__m128i _curX = _mm_setzero_si128();
-			__m128i _curY = _mm_setzero_si128();
-			__m128 _gx = _mm_set_ps1(0.0f);
-			__m128 _gy = _mm_set_ps1(0.0f);
-			for (uint index = 0; index < length - count2; index += 4)
+			int count = length / SSEStep;
+			int count2 = length & (SSEStep - 1);
+			for (uint index = 0; index < length - count2; index += SSEStep)
 			{
-				sum += 4;
+				sum += SSEStep;
 
-				_curX = _mm_cvttps_epi32(_mm_add_ps(_x, _mm_load_ps(modelContourX + index)));
-				_curY = _mm_cvttps_epi32(_mm_add_ps(_y, _mm_load_ps(modelContourY + index)));
+				_curX = _mm256_cvttps_epi32(_mm256_add_ps(_x, _mm256_load_ps(modelContourX + index)));
+				_curY = _mm256_cvttps_epi32(_mm256_add_ps(_y, _mm256_load_ps(modelContourY + index)));
 
-				if (pSobleX != nullptr)
+				__m256i l = _mm256_add_epi32(_curX, _mm256_mullo_epi32(_curY, _mm256_set1_epi32(dstSobleX.cols)));
+				for (uchar k = 0; k < SSEStep; k++)
 				{
-					for (uchar k = 0; k < 4; k++)
+					if (_curX.m256i_i32[k] < 0 || _curX.m256i_i32[k] > dstSobleX.cols - 1
+						|| _curY.m256i_i32[k] < 0 || _curY.m256i_i32[k] > dstSobleX.rows - 1)
 					{
-						if (_curX.m128i_i32[k] < 0 || _curX.m128i_i32[k] > dstSobleX.cols - 1
-							|| _curY.m128i_i32[k] < 0 || _curY.m128i_i32[k] > dstSobleX.rows - 1)
-						{
-							_gx.m128_f32[k] = 0;
-							_gy.m128_f32[k] = 0;
-						}
-						else
-						{
-							uint l = _curY.m128i_i32[k] * dstSobleX.cols + _curX.m128i_i32[k];
-							_gx.m128_f32[k] = pSobleX[l];
-							_gy.m128_f32[k] = pSobleY[l];
-						}
+						_gx.m256_f32[k] = 0;
+						_gy.m256_f32[k] = 0;
 					}
-				}
-				else
-				{
-					for (uchar k = 0; k < 4; k++)
+					else
 					{
-						if (_curX.m128i_i32[k] < 0 || _curX.m128i_i32[k] > dstSobleX.cols - 1
-							|| _curY.m128i_i32[k] < 0 || _curY.m128i_i32[k] > dstSobleX.rows - 1)
+						if (pSobleX != nullptr)
 						{
-							_gx.m128_f32[k] = 0;
-							_gy.m128_f32[k] = 0;
+							_gx.m256_f32[k] = pSobleX[l.m256i_i32[k]];
+							_gy.m256_f32[k] = pSobleY[l.m256i_i32[k]];
 						}
 						else
 						{
-							_gx.m128_f32[k] = dstSobleX.at<float>(_curY.m128i_i32[k], _curX.m128i_i32[k]);
-							_gy.m128_f32[k] = dstSobleY.at<float>(_curY.m128i_i32[k], _curX.m128i_i32[k]);
+							_gx.m256_f32[k] = dstSobleX.at<float>(_curY.m256i_i32[k], _curX.m256i_i32[k]);
+							_gy.m256_f32[k] = dstSobleY.at<float>(_curY.m256i_i32[k], _curX.m256i_i32[k]);
 						}
 					}
 				}
 
-				__m128 _graddot = _mm_add_ps(_mm_mul_ps(_gx, _mm_load_ps(modelGradX + index)), _mm_mul_ps(_gy, _mm_load_ps(modelGradY + index)));
-				__m128 _grad = _mm_sqrt_ps(_mm_add_ps(_mm_mul_ps(_gx, _gx), _mm_mul_ps(_gy, _gy)));
+				__m256 _graddot = _mm256_add_ps(_mm256_mul_ps(_gx, _mm256_load_ps(modelGradX + index)), _mm256_mul_ps(_gy, _mm256_load_ps(modelGradY + index)));
+				__m256 _grad = _mm256_sqrt_ps(_mm256_add_ps(_mm256_mul_ps(_gx, _gx), _mm256_mul_ps(_gy, _gy)));
 
-				for (uchar k = 0; k < 4; k++)
+				for (uchar k = 0; k < SSEStep; k++)
 				{
-					if (abs(_gx.m128_f32[k]) > 1e-7 || abs(_gy.m128_f32[k]) > 1e-7)
+					if (abs(_gx.m256_f32[k]) > 1e-7 || abs(_gy.m256_f32[k]) > 1e-7)
 					{
-						partialScore += _graddot.m128_f32[k] / _grad.m128_f32[k];
+						partialScore += _graddot.m256_f32[k] / _grad.m256_f32[k];
 
-						score = partialScore / (sum + k - 3);
+						score = partialScore / (sum + k - (SSEStep - 1));
 						if (score < NormMinScore * (index + 1))
 							goto Next;
 						//if (score < (min((minScore - 1) + NormGreediness * sum, NormMinScore * sum)))

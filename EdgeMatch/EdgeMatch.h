@@ -20,12 +20,14 @@
 #include <Windows.h>
 #include <iostream>
 
-//#define Paraller_Rotate
-//#define Paraller_Search
+#define Paraller_Rotate
+#define Paraller_Search
 //#define DrawContours
 #define SSE
+//#define SavePNG
 #define PyrNum 3
 #define TestCount 1
+#define SSEStep 8
 
 
 struct EdgeModelBaseInfo
@@ -395,14 +397,109 @@ public:
 			pSobleY = (float*)dstSobleY.ptr();
 		}
 
-		for (size_t y = r.start; y < r.end; y++)
+		for (uint y = r.start; y < r.end; y++)
 		{
-			for (size_t x = center[1]; x < center[3]; x++)
+			for (uint x = center[1]; x < center[3]; x++)
 			{
 				float partialScore = 0;
 				float score = 0;
-				int sum = 0;
+				uint sum = 0;
 
+#ifdef SSE
+				__m256 _x = _mm256_set1_ps(x);
+				__m256 _y = _mm256_set1_ps(y);
+				__m256i _curX = _mm256_setzero_si256();
+				__m256i _curY = _mm256_setzero_si256();
+				__m256 _gx = _mm256_set1_ps(0.0f);
+				__m256 _gy = _mm256_set1_ps(0.0f);
+
+				int count = length / SSEStep;
+				int count2 = length & (SSEStep - 1);
+				for (uint index = 0; index < length - count2; index += SSEStep)
+				{
+					sum += SSEStep;
+
+					_curX = _mm256_cvttps_epi32(_mm256_add_ps(_x, _mm256_load_ps(modelContourX + index)));
+					_curY = _mm256_cvttps_epi32(_mm256_add_ps(_y, _mm256_load_ps(modelContourY + index)));
+
+					__m256i l = _mm256_add_epi32(_curX, _mm256_mullo_epi32(_curY, _mm256_set1_epi32(dstSobleX.cols)));
+					for (uchar k = 0; k < SSEStep; k++)
+					{
+						if (_curX.m256i_i32[k] < 0 || _curX.m256i_i32[k] > dstSobleX.cols - 1
+							|| _curY.m256i_i32[k] < 0 || _curY.m256i_i32[k] > dstSobleX.rows - 1)
+						{
+							_gx.m256_f32[k] = 0;
+							_gy.m256_f32[k] = 0;
+						}
+						else
+						{
+							if (pSobleX != nullptr)
+							{
+								_gx.m256_f32[k] = pSobleX[l.m256i_i32[k]];
+								_gy.m256_f32[k] = pSobleY[l.m256i_i32[k]];
+							}
+							else
+							{
+								_gx.m256_f32[k] = dstSobleX.at<float>(_curY.m256i_i32[k], _curX.m256i_i32[k]);
+								_gy.m256_f32[k] = dstSobleY.at<float>(_curY.m256i_i32[k], _curX.m256i_i32[k]);
+							}
+						}
+					}
+
+					__m256 _graddot = _mm256_add_ps(_mm256_mul_ps(_gx, _mm256_load_ps(modelGradX + index)), _mm256_mul_ps(_gy, _mm256_load_ps(modelGradY + index)));
+					__m256 _grad = _mm256_sqrt_ps(_mm256_add_ps(_mm256_mul_ps(_gx, _gx), _mm256_mul_ps(_gy, _gy)));
+
+					for (uchar k = 0; k < SSEStep; k++)
+					{
+						if (abs(_gx.m256_f32[k]) > 1e-7 || abs(_gy.m256_f32[k]) > 1e-7)
+						{
+							partialScore += _graddot.m256_f32[k] / _grad.m256_f32[k];
+
+							score = partialScore / (sum + k - (SSEStep - 1));
+							if (score < NormMinScore * (index + 1))
+								goto Next;
+							//if (score < (min((minScore - 1) + NormGreediness * sum, NormMinScore * sum)))
+							//	break;
+						}
+					}
+				}
+				for (uint index = length - count2; index < length; index++)
+				{
+					sum++;
+					uint curX = x + modelContourX[index];
+					uint curY = y + modelContourY[index];
+
+					if (curX > dstSobleX.cols - 1 || curY > dstSobleX.rows - 1)
+						continue;
+
+					float gx = 0;
+					float gy = 0;
+					if (pSobleX != nullptr)
+					{
+						uint l = curY * dstSobleX.cols + curX;
+						gx = pSobleX[l];
+						gy = pSobleY[l];
+					}
+					else
+					{
+						gx = dstSobleX.at<float>(curY, curX);
+						gy = dstSobleY.at<float>(curY, curX);
+					}
+
+					if (abs(gx) > 1e-7 || abs(gy) > 1e-7)
+					{
+						float grad = sqrt(gx * gx + gy * gy);
+						partialScore += ((gx * modelGradX[index] + gy * modelGradY[index])) / grad;
+
+						score = partialScore / sum;
+						if (score < NormMinScore * (index + 1))
+							break;
+						//if (score < (min((minScore - 1) + NormGreediness * sum, NormMinScore * sum)))
+						//	break;
+					}
+				}
+			Next:
+#else
 				for (size_t index = 0; index < length; index++)
 				{
 					sum++;
@@ -431,7 +528,7 @@ public:
 						float n_gx = gx / grad;
 						float n_gy = gy / grad;
 						partialScore += (n_gx * modelGradX[index] + n_gy * modelGradY[index]);
-						
+
 						score = partialScore / sum;
 						if (score < NormMinScore * (index + 1))
 							break;
@@ -439,6 +536,7 @@ public:
 							break;*/
 					}
 				}
+#endif
 
 				if (score > searchInfo.Score)
 				{
