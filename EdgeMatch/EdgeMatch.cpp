@@ -20,7 +20,7 @@ int main()
 	for (size_t i = 0; i < TestCount; i++)
 	{
 		EdgeMatch::GetInstance().create_edge_model_path("D:\\Download\\边缘匹配\\template.jpg",
-			"0d4ed8a0-9a35-42cb-ac77-b06c76ed13c8", 15, 30, 3, 0.5, -45, 45, 1, 0.9);
+			"0d4ed8a0-9a35-42cb-ac77-b06c76ed13c8", 0, 220, 3, 0.5, -45, 45, 1, 0.9);
 	}
 	QueryPerformanceCounter(&nEndTime);
 	time = (1000.0 / TestCount) * (nEndTime.QuadPart - nBeginTime.QuadPart) / (double)nFreq.QuadPart;
@@ -50,6 +50,7 @@ int EdgeMatch::create_edge_model_path(IN const char* picPath, IN const char* mod
 	ModelInfo->PyrNumber = pyrNum;
 
 	cv::Mat src = cv::imread(picPath, cv::IMREAD_GRAYSCALE);
+	src = ~src;
 	cv::Mat sobelX, sobleY;
 	cv::Sobel(src, sobelX, CV_32FC1, 1, 0, 3);
 	cv::Sobel(src, sobleY, CV_32FC1, 0, 1, 3);
@@ -285,6 +286,7 @@ int EdgeMatch::find_edge_model_path(IN const char* picPath, IN const char* model
 	if (ModelInfo != nullptr && ModelInfo->ModelID == id)
 	{
 		cv::Mat src = cv::imread(picPath, cv::IMREAD_GRAYSCALE);
+		src = ~src;
 		cv::Mat sobelX, sobleY;
 		cv::Sobel(src, sobelX, CV_32FC1, 1, 0, 3);
 		cv::Sobel(src, sobleY, CV_32FC1, 0, 1, 3);
@@ -587,8 +589,6 @@ void EdgeMatch::searchMatchModel(IN cv::Mat& dstSobleX, IN cv::Mat& dstSobleY, I
 			int count2 = length & (SSEStep - 1);
 			for (uint index = 0; index < length - count2; index += SSEStep)
 			{
-				sum += SSEStep;
-
 				_curX = _mm256_cvttps_epi32(_mm256_add_ps(_x, _mm256_load_ps(modelContourX + index)));
 				_curY = _mm256_cvttps_epi32(_mm256_add_ps(_y, _mm256_load_ps(modelContourY + index)));
 
@@ -620,15 +620,14 @@ void EdgeMatch::searchMatchModel(IN cv::Mat& dstSobleX, IN cv::Mat& dstSobleY, I
 				__m256 _grad = _mm256_sqrt_ps(_mm256_add_ps(_mm256_mul_ps(_gx, _gx), _mm256_mul_ps(_gy, _gy)));
 				__m256 _value = _mm256_div_ps(_graddot, _grad);
 
-
 				for (uchar k = 0; k < SSEStep; k++)
 				{
+					sum++;
 					if (abs(_gx.m256_f32[k]) > 1e-7 || abs(_gy.m256_f32[k]) > 1e-7)
 					{
-						//partialScore += _graddot.m256_f32[k] / _grad.m256_f32[k];
 						partialScore += _value.m256_f32[k];
 
-						score = partialScore / (sum + k - (SSEStep - 1));
+						score = partialScore / sum;
 						if (score < NormMinScore * (index + 1))
 							goto Next;
 						//if (score < (min((minScore - 1) + NormGreediness * sum, NormMinScore * sum)))
