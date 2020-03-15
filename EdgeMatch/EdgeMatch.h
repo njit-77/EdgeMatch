@@ -20,8 +20,8 @@
 #include <Windows.h>
 #include <iostream>
 
-#define Paraller_Rotate
-#define Paraller_Search
+//#define Paraller_Rotate
+//#define Paraller_Search
 //#define DrawContours
 #define SSE
 //#define SavePNG
@@ -525,9 +525,7 @@ public:
 					if (gx != 0 || gy != 0)
 					{
 						float grad = sqrt(gx * gx + gy * gy);
-						float n_gx = gx / grad;
-						float n_gy = gy / grad;
-						partialScore += (n_gx * modelGradX[index] + n_gy * modelGradY[index]);
+						partialScore += ((gx * modelGradX[index] + gy * modelGradY[index])) / grad;
 
 						score = partialScore / sum;
 						if (score < NormMinScore * (index + 1))

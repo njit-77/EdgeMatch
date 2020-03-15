@@ -102,7 +102,7 @@ void EdgeMatch::createGradInfo(IN cv::Mat pyrImage, IN cv::Mat pyrSobelX, IN cv:
 	cv::findContours(edge, contours, cv::RETR_LIST, cv::CHAIN_APPROX_NONE);
 
 	std::vector<cv::Point> contoursQuery;
-	for (size_t j = 0; j < contours.size(); j++)
+	for (uint j = 0; j < contours.size(); j++)
 	{
 		contoursQuery.insert(contoursQuery.end(), contours[j].begin(), contours[j].end());
 	}
@@ -114,6 +114,92 @@ void EdgeMatch::createGradInfo(IN cv::Mat pyrImage, IN cv::Mat pyrSobelX, IN cv:
 		pSobleX = (float*)pyrSobelX.ptr();
 		pSobleY = (float*)pyrSobelY.ptr();
 	}
+#ifdef SSE
+	__m256 _gx = _mm256_set1_ps(0.0f);
+	__m256 _gy = _mm256_set1_ps(0.0f);
+	__m256i _curX = _mm256_setzero_si256();
+	__m256i _curY = _mm256_setzero_si256();
+	__m256i cols = _mm256_set1_epi32(pyrSobelX.cols);
+	int count = contoursQuery.size() / SSEStep;
+	int count2 = contoursQuery.size() & (SSEStep - 1);
+	for (uint j = 0; j < contoursQuery.size() - count2; j += SSEStep)
+	{
+		if (pSobleX != nullptr)
+		{
+			_curX = _mm256_setr_epi32(contoursQuery[j + 7].x, contoursQuery[j + 6].x,
+				contoursQuery[j + 5].x, contoursQuery[j + 4].x,
+				contoursQuery[j + 3].x, contoursQuery[j + 2].x,
+				contoursQuery[j + 1].x, contoursQuery[j].x);
+
+			_curY = _mm256_setr_epi32(contoursQuery[j + 7].y, contoursQuery[j + 6].y,
+				contoursQuery[j + 5].y, contoursQuery[j + 4].y,
+				contoursQuery[j + 3].y, contoursQuery[j + 2].y,
+				contoursQuery[j + 1].y, contoursQuery[j].y);
+
+			__m256i l = _mm256_add_epi32(_curX, _mm256_mullo_epi32(_curY, cols));
+
+			for (uchar k = 0; k < SSEStep; k++)
+			{
+				_gx.m256_f32[SSEStep - 1 - k] = pSobleX[l.m256i_i32[k]];
+				_gy.m256_f32[SSEStep - 1 - k] = pSobleY[l.m256i_i32[k]];
+			}
+		}
+		else
+		{
+			for (uchar k = 0; k < SSEStep; k++)
+			{
+				_gx.m256_f32[k] = pyrSobelX.at<float>(contoursQuery[j + k]);
+				_gy.m256_f32[k] = pyrSobelY.at<float>(contoursQuery[j + k]);
+			}
+		}
+
+		__m256 _grad = _mm256_sqrt_ps(_mm256_add_ps(_mm256_mul_ps(_gx, _gx), _mm256_mul_ps(_gy, _gy)));
+
+		for (uchar k = 0; k < SSEStep; k++)
+		{
+			__m256 magnitudeN = _mm256_div_ps(_mm256_set1_ps(1.0f), _grad);
+			__m256 gx_n = _mm256_mul_ps(_gx, magnitudeN);
+			__m256 gy_n = _mm256_mul_ps(_gy, magnitudeN);
+
+			EdgeModelBaseInfo gradInfo;
+			gradInfo.grad_x = gx_n.m256_f32[k];
+			gradInfo.grad_y = gy_n.m256_f32[k];
+			gradInfo.magnitude = _grad.m256_f32[k];
+			gradInfo.magnitudeN = magnitudeN.m256_f32[k];
+			gradInfo.contour = contoursQuery[j + k];
+
+			gradData.push_back(gradInfo);
+		}
+	}
+	for (uint j = contoursQuery.size() - count2; j < contoursQuery.size(); j++)
+	{
+		EdgeModelBaseInfo gradInfo;
+
+		float gx = 0;
+		float gy = 0;
+		if (pSobleX != nullptr)
+		{
+			int index = contoursQuery[j].y * pyrSobelX.cols + contoursQuery[j].x;
+			gx = pSobleX[index];
+			gy = pSobleY[index];
+		}
+		else
+		{
+			gx = pyrSobelX.at<float>(contoursQuery[j]);
+			gy = pyrSobelY.at<float>(contoursQuery[j]);
+		}
+
+		float grad = sqrt(gx * gx + gy * gy);
+		gradInfo.grad_x = gx / grad;
+		gradInfo.grad_y = gy / grad;
+		gradInfo.magnitude = grad;
+		if (cv::abs(grad) > 1e-7)
+			gradInfo.magnitudeN = 1 / grad;
+		gradInfo.contour = contoursQuery[j];
+
+		gradData.push_back(gradInfo);
+	}
+#else
 	for (size_t j = 0; j < contoursQuery.size(); j++)
 	{
 		EdgeModelBaseInfo gradInfo;
@@ -142,6 +228,7 @@ void EdgeMatch::createGradInfo(IN cv::Mat pyrImage, IN cv::Mat pyrSobelX, IN cv:
 
 		gradData.push_back(gradInfo);
 	}
+#endif
 }
 
 void EdgeMatch::deleteContourPoints(IN OUT std::vector<EdgeModelBaseInfo>& gradData)
@@ -488,7 +575,7 @@ void EdgeMatch::searchMatchModel(IN cv::Mat& dstSobleX, IN cv::Mat& dstSobleY, I
 			float score = 0;
 			uint sum = 0;
 
-#ifdef SSE			
+#ifdef SSE	
 			__m256 _x = _mm256_set1_ps(x);
 			__m256 _y = _mm256_set1_ps(y);
 			__m256i _curX = _mm256_setzero_si256();
@@ -531,12 +618,15 @@ void EdgeMatch::searchMatchModel(IN cv::Mat& dstSobleX, IN cv::Mat& dstSobleY, I
 
 				__m256 _graddot = _mm256_add_ps(_mm256_mul_ps(_gx, _mm256_load_ps(modelGradX + index)), _mm256_mul_ps(_gy, _mm256_load_ps(modelGradY + index)));
 				__m256 _grad = _mm256_sqrt_ps(_mm256_add_ps(_mm256_mul_ps(_gx, _gx), _mm256_mul_ps(_gy, _gy)));
+				__m256 _value = _mm256_div_ps(_graddot, _grad);
+
 
 				for (uchar k = 0; k < SSEStep; k++)
 				{
 					if (abs(_gx.m256_f32[k]) > 1e-7 || abs(_gy.m256_f32[k]) > 1e-7)
 					{
-						partialScore += _graddot.m256_f32[k] / _grad.m256_f32[k];
+						//partialScore += _graddot.m256_f32[k] / _grad.m256_f32[k];
+						partialScore += _value.m256_f32[k];
 
 						score = partialScore / (sum + k - (SSEStep - 1));
 						if (score < NormMinScore * (index + 1))
