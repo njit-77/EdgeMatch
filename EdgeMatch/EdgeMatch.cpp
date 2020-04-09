@@ -20,7 +20,7 @@ int main()
 	for (size_t i = 0; i < TestCount; i++)
 	{
 		EdgeMatch::GetInstance().create_edge_model_path("D:\\Download\\边缘匹配\\template.jpg",
-			"0d4ed8a0-9a35-42cb-ac77-b06c76ed13c8", 0, 220, 3, 0.5, -45, 45, 1, 0.9);
+			"0d4ed8a0-9a35-42cb-ac77-b06c76ed13c8", 0, 220, PyrNum, 0.5, -45, 45, 1, 0.9);
 	}
 	QueryPerformanceCounter(&nEndTime);
 	time = (1000.0 / TestCount) * (nEndTime.QuadPart - nBeginTime.QuadPart) / (double)nFreq.QuadPart;
@@ -50,7 +50,6 @@ int EdgeMatch::create_edge_model_path(IN const char* picPath, IN const char* mod
 	ModelInfo->PyrNumber = pyrNum;
 
 	cv::Mat src = cv::imread(picPath, cv::IMREAD_GRAYSCALE);
-	src = ~src;
 	cv::Mat sobelX, sobleY;
 	cv::Sobel(src, sobelX, CV_32FC1, 1, 0, 3);
 	cv::Sobel(src, sobleY, CV_32FC1, 0, 1, 3);
@@ -286,7 +285,6 @@ int EdgeMatch::find_edge_model_path(IN const char* picPath, IN const char* model
 	if (ModelInfo != nullptr && ModelInfo->ModelID == id)
 	{
 		cv::Mat src = cv::imread(picPath, cv::IMREAD_GRAYSCALE);
-		src = ~src;
 		cv::Mat sobelX, sobleY;
 		cv::Sobel(src, sobelX, CV_32FC1, 1, 0, 3);
 		cv::Sobel(src, sobleY, CV_32FC1, 0, 1, 3);
