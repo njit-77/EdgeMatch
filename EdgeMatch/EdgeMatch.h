@@ -23,12 +23,12 @@
 //#define Paraller_Rotate
 //#define Paraller_Search
 //#define DrawContours
-#define SSE
+//#define SSE
 //#define SavePNG
-#define PyrNum 3
+#define PyrNum 5
 #define TestCount 1
 #define SSEStep 8
-
+#define CullCount 5
 
 struct EdgeModelBaseInfo
 {
@@ -256,7 +256,7 @@ public:
 		@param stepAngle 搜索步进角度
 		@param greediness 贪婪值
 	*/
-	int create_edge_model_path(IN const char* picPath, IN const char* modelID, IN int minGray, IN int maxGray, IN int pyrNum,
+	int create_edge_model_path(IN cv::Mat& src, IN const char* modelID, IN int minGray, IN int maxGray, IN int pyrNum,
 		IN float score, IN float startAngle, IN float endAngle, IN float stepAngle, IN float greediness);
 
 	/** @brief 基于图片查找模版
@@ -268,7 +268,7 @@ public:
 		@param picPath 图片路径
 		@param modelID 模型ID
 	*/
-	int find_edge_model_path(IN const char* picPath, IN const char* modelID);
+	int find_edge_model_path(IN cv::Mat& src, IN const char* modelID);
 
 public:
 
@@ -302,33 +302,7 @@ public:
 		modelGradX(_modelGradX), modelGradY(_modelGradY),
 		modelContourX(_modelContourX), modelContourY(_modelContourY)
 	{
-		if (modelGradX != nullptr)
-		{
-			delete[]modelGradX;
-			modelGradX = nullptr;
-		}
-		modelGradX = new float[length];
 
-		if (modelGradY != nullptr)
-		{
-			delete[]modelGradY;
-			modelGradY = nullptr;
-		}
-		modelGradY = new float[length];
-
-		if (modelContourX != nullptr)
-		{
-			delete[]modelContourX;
-			modelContourX = nullptr;
-		}
-		modelContourX = new float[length];
-
-		if (modelContourY != nullptr)
-		{
-			delete[]modelContourY;
-			modelContourY = nullptr;
-		}
-		modelContourY = new float[length];
 	}
 
 	virtual void operator()(const cv::Range& r) const
@@ -389,12 +363,12 @@ public:
 		float NormGreediness = (1 - greediness * minScore) / (1 - greediness) / length;
 		float NormMinScore = minScore / length;
 
-		float* pSobleX = nullptr;
-		float* pSobleY = nullptr;
+		short* pSobleX = nullptr;
+		short* pSobleY = nullptr;
 		if (dstSobleX.isContinuous() && dstSobleY.isContinuous())
 		{
-			pSobleX = (float*)dstSobleX.ptr();
-			pSobleY = (float*)dstSobleY.ptr();
+			pSobleX = (short*)dstSobleX.ptr();
+			pSobleY = (short*)dstSobleY.ptr();
 		}
 
 		for (uint y = r.start; y < r.end; y++)
@@ -440,8 +414,8 @@ public:
 							}
 							else
 							{
-								_gx.m256_f32[k] = dstSobleX.at<float>(_curY.m256i_i32[k], _curX.m256i_i32[k]);
-								_gy.m256_f32[k] = dstSobleY.at<float>(_curY.m256i_i32[k], _curX.m256i_i32[k]);
+								_gx.m256_f32[k] = dstSobleX.at<short>(_curY.m256i_i32[k], _curX.m256i_i32[k]);
+								_gy.m256_f32[k] = dstSobleY.at<short>(_curY.m256i_i32[k], _curX.m256i_i32[k]);
 							}
 						}
 					}
@@ -456,10 +430,8 @@ public:
 							partialScore += _graddot.m256_f32[k] / _grad.m256_f32[k];
 
 							score = partialScore / (sum + k - (SSEStep - 1));
-							if (score < NormMinScore * (index + 1))
+							if (score < (min((minScore - 1) + NormGreediness * sum, NormMinScore * sum)))
 								goto Next;
-							//if (score < (min((minScore - 1) + NormGreediness * sum, NormMinScore * sum)))
-							//	break;
 						}
 					}
 				}
@@ -482,8 +454,8 @@ public:
 					}
 					else
 					{
-						gx = dstSobleX.at<float>(curY, curX);
-						gy = dstSobleY.at<float>(curY, curX);
+						gx = dstSobleX.at<short>(curY, curX);
+						gy = dstSobleY.at<short>(curY, curX);
 					}
 
 					if (abs(gx) > 1e-7 || abs(gy) > 1e-7)
@@ -492,10 +464,8 @@ public:
 						partialScore += ((gx * modelGradX[index] + gy * modelGradY[index])) / grad;
 
 						score = partialScore / sum;
-						if (score < NormMinScore * (index + 1))
+						if (score < (min((minScore - 1) + NormGreediness * sum, NormMinScore * sum)))
 							break;
-						//if (score < (min((minScore - 1) + NormGreediness * sum, NormMinScore * sum)))
-						//	break;
 					}
 				}
 			Next:
@@ -518,8 +488,8 @@ public:
 					}
 					else
 					{
-						gx = dstSobleX.at<float>(curY, curX);
-						gy = dstSobleY.at<float>(curY, curX);
+						gx = dstSobleX.at<short>(curY, curX);
+						gy = dstSobleY.at<short>(curY, curX);
 					}
 
 					if (gx != 0 || gy != 0)
@@ -528,10 +498,8 @@ public:
 						partialScore += ((gx * modelGradX[index] + gy * modelGradY[index])) / grad;
 
 						score = partialScore / sum;
-						if (score < NormMinScore * (index + 1))
+						if (score < (min((minScore - 1) + NormGreediness * sum, NormMinScore * sum)))
 							break;
-						/*if (score < (min((minScore - 1) + NormGreediness * sum, NormMinScore * sum)))
-							break;*/
 					}
 				}
 #endif

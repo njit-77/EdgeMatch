@@ -17,10 +17,11 @@ int main()
 	LARGE_INTEGER nEndTime;
 	QueryPerformanceFrequency(&nFreq);
 	QueryPerformanceCounter(&nBeginTime);
+	cv::Mat temImg = cv::imread("D:\\Download\\边缘匹配\\template.jpg", cv::IMREAD_GRAYSCALE);
 	for (size_t i = 0; i < TestCount; i++)
 	{
-		EdgeMatch::GetInstance().create_edge_model_path("D:\\Download\\边缘匹配\\template.jpg",
-			"0d4ed8a0-9a35-42cb-ac77-b06c76ed13c8", 0, 220, PyrNum, 0.5, -45, 45, 1, 0.9);
+		EdgeMatch::GetInstance().create_edge_model_path(temImg,
+			"0d4ed8a0-9a35-42cb-ac77-b06c76ed13c8", 15, 30, PyrNum, 0.5, -45, 45, 1, 0.9);
 	}
 	QueryPerformanceCounter(&nEndTime);
 	time = (1000.0 / TestCount) * (nEndTime.QuadPart - nBeginTime.QuadPart) / (double)nFreq.QuadPart;
@@ -28,9 +29,10 @@ int main()
 
 
 	QueryPerformanceCounter(&nBeginTime);
+	cv::Mat dstImg = cv::imread("D:\\Download\\边缘匹配\\search.jpg", cv::IMREAD_GRAYSCALE);
 	for (size_t i = 0; i < TestCount; i++)
 	{
-		EdgeMatch::GetInstance().find_edge_model_path("D:\\Download\\边缘匹配\\search.jpg",
+		EdgeMatch::GetInstance().find_edge_model_path(dstImg,
 			"0d4ed8a0-9a35-42cb-ac77-b06c76ed13c8");
 	}
 	QueryPerformanceCounter(&nEndTime);
@@ -40,7 +42,7 @@ int main()
 	system("pause");
 }
 
-int EdgeMatch::create_edge_model_path(IN const char* picPath, IN const char* modelID, IN int minGray, IN int maxGray, IN int pyrNum,
+int EdgeMatch::create_edge_model_path(IN cv::Mat& src, IN const char* modelID, IN int minGray, IN int maxGray, IN int pyrNum,
 	IN float score, IN float startAngle, IN float endAngle, IN float stepAngle, IN float greediness)
 {
 	ModelInfo = new EdgeModelInfo;
@@ -49,7 +51,6 @@ int EdgeMatch::create_edge_model_path(IN const char* picPath, IN const char* mod
 	ModelInfo->MaxGray = maxGray;
 	ModelInfo->PyrNumber = pyrNum;
 
-	cv::Mat src = cv::imread(picPath, cv::IMREAD_GRAYSCALE);
 	cv::Mat sobelX, sobleY;
 	cv::Sobel(src, sobelX, CV_32FC1, 1, 0, 3);
 	cv::Sobel(src, sobleY, CV_32FC1, 0, 1, 3);
@@ -155,12 +156,12 @@ void EdgeMatch::createGradInfo(IN cv::Mat pyrImage, IN cv::Mat pyrSobelX, IN cv:
 
 		__m256 _grad = _mm256_sqrt_ps(_mm256_add_ps(_mm256_mul_ps(_gx, _gx), _mm256_mul_ps(_gy, _gy)));
 
+		__m256 magnitudeN = _mm256_div_ps(_mm256_set1_ps(1.0f), _grad);
+		__m256 gx_n = _mm256_mul_ps(_gx, magnitudeN);
+		__m256 gy_n = _mm256_mul_ps(_gy, magnitudeN);
+
 		for (uchar k = 0; k < SSEStep; k++)
 		{
-			__m256 magnitudeN = _mm256_div_ps(_mm256_set1_ps(1.0f), _grad);
-			__m256 gx_n = _mm256_mul_ps(_gx, magnitudeN);
-			__m256 gy_n = _mm256_mul_ps(_gy, magnitudeN);
-
 			EdgeModelBaseInfo gradInfo;
 			gradInfo.grad_x = gx_n.m256_f32[k];
 			gradInfo.grad_y = gy_n.m256_f32[k];
@@ -189,15 +190,18 @@ void EdgeMatch::createGradInfo(IN cv::Mat pyrImage, IN cv::Mat pyrSobelX, IN cv:
 			gy = pyrSobelY.at<float>(contoursQuery[j]);
 		}
 
-		float grad = sqrt(gx * gx + gy * gy);
-		gradInfo.grad_x = gx / grad;
-		gradInfo.grad_y = gy / grad;
-		gradInfo.magnitude = grad;
-		if (cv::abs(grad) > 1e-7)
-			gradInfo.magnitudeN = 1 / grad;
-		gradInfo.contour = contoursQuery[j];
+		if (abs(gx) > 10 || abs(gy) > 10)
+		{
+			float grad = sqrt(gx * gx + gy * gy);
+			gradInfo.grad_x = gx / grad;
+			gradInfo.grad_y = gy / grad;
+			gradInfo.magnitude = grad;
+			if (cv::abs(grad) > 1e-7)
+				gradInfo.magnitudeN = 1 / grad;
+			gradInfo.contour = contoursQuery[j];
 
-		gradData.push_back(gradInfo);
+			gradData.push_back(gradInfo);
+		}
 	}
 #else
 	for (size_t j = 0; j < contoursQuery.size(); j++)
@@ -218,15 +222,18 @@ void EdgeMatch::createGradInfo(IN cv::Mat pyrImage, IN cv::Mat pyrSobelX, IN cv:
 			gy = pyrSobelY.at<float>(contoursQuery[j]);
 		}
 
-		float grad = sqrt(gx * gx + gy * gy);
-		gradInfo.grad_x = gx / grad;
-		gradInfo.grad_y = gy / grad;
-		gradInfo.magnitude = grad;
-		if (cv::abs(grad) > 1e-7)
-			gradInfo.magnitudeN = 1 / grad;
-		gradInfo.contour = contoursQuery[j];
+		if (abs(gx) > 10 || abs(gy) > 10)
+		{
+			float grad = sqrt(gx * gx + gy * gy);
+			gradInfo.grad_x = gx / grad;
+			gradInfo.grad_y = gy / grad;
+			gradInfo.magnitude = grad;
+			if (cv::abs(grad) > 1e-7)
+				gradInfo.magnitudeN = 1 / grad;
+			gradInfo.contour = contoursQuery[j];
 
-		gradData.push_back(gradInfo);
+			gradData.push_back(gradInfo);
+		}
 	}
 #endif
 }
@@ -237,11 +244,10 @@ void EdgeMatch::deleteContourPoints(IN OUT std::vector<EdgeModelBaseInfo>& gradD
 
 	std::vector<EdgeModelBaseInfo> data;
 
-	int cullCount = 3;
-	for (size_t i = 0; i < gradData.size(); i += 3)
+	for (size_t i = 0; i < gradData.size(); i += CullCount)
 	{
 		std::map<float, int> culls;
-		for (size_t j = 0; j < cullCount; j++)
+		for (size_t j = 0; j < CullCount; j++)
 		{
 			if (i + j < gradData.size())
 			{
@@ -278,20 +284,17 @@ void EdgeMatch::normalContourPoints(IN OUT std::vector<EdgeModelBaseInfo>& gradD
 	}
 }
 
-int EdgeMatch::find_edge_model_path(IN const char* picPath, IN const char* modelID)
+int EdgeMatch::find_edge_model_path(IN cv::Mat& src, IN const char* modelID)
 {
 	GUID id = { 0 };
 	UuidFromStringA((RPC_CSTR)modelID, &id);
 	if (ModelInfo != nullptr && ModelInfo->ModelID == id)
 	{
-		cv::Mat src = cv::imread(picPath, cv::IMREAD_GRAYSCALE);
 		cv::Mat sobelX, sobleY;
-		cv::Sobel(src, sobelX, CV_32FC1, 1, 0, 3);
-		cv::Sobel(src, sobleY, CV_32FC1, 0, 1, 3);
-		std::vector<cv::Mat> pyrImage;
+		cv::Sobel(src, sobelX, CV_16SC1, 1, 0, 3);
+		cv::Sobel(src, sobleY, CV_16SC1, 0, 1, 3);
 		std::vector<cv::Mat> pyrSobelX;
 		std::vector<cv::Mat> pyrSobelY;
-		getPyrImage(src, ModelInfo->PyrNumber, pyrImage);
 		getPyrImage(sobelX, ModelInfo->PyrNumber, pyrSobelX);
 		getPyrImage(sobleY, ModelInfo->PyrNumber, pyrSobelY);
 
@@ -306,8 +309,36 @@ int EdgeMatch::find_edge_model_path(IN const char* picPath, IN const char* model
 		float* modelCenterY = nullptr;
 		{
 			//顶层搜索
+			if (modelGradX != nullptr)
+			{
+				delete[]modelGradX;
+				modelGradX = nullptr;
+			}
+			modelGradX = new float[ModelInfo->EdgeModelBaseInfoSize[ModelInfo->PyrNumber - 1]];
+
+			if (modelGradY != nullptr)
+			{
+				delete[]modelGradY;
+				modelGradY = nullptr;
+			}
+			modelGradY = new float[ModelInfo->EdgeModelBaseInfoSize[ModelInfo->PyrNumber - 1]];
+
+			if (modelCenterX != nullptr)
+			{
+				delete[]modelCenterX;
+				modelCenterX = nullptr;
+			}
+			modelCenterX = new float[ModelInfo->EdgeModelBaseInfoSize[ModelInfo->PyrNumber - 1]];
+
+			if (modelCenterY != nullptr)
+			{
+				delete[]modelCenterY;
+				modelCenterY = nullptr;
+			}
+			modelCenterY = new float[ModelInfo->EdgeModelBaseInfoSize[ModelInfo->PyrNumber - 1]];
+
 			float step = ModelInfo->StepAngle * pow(2, ModelInfo->PyrNumber - 1);
-			for (float angle = ModelInfo->StartAngle; angle < ModelInfo->EndAngle; angle += step)
+			for (float angle = ModelInfo->StartAngle; angle <= ModelInfo->EndAngle; angle += step)
 			{
 #ifdef Paraller_Rotate
 				parallel_for_(cv::Range(0, ModelInfo->EdgeModelBaseInfoSize[ModelInfo->PyrNumber - 1]),
@@ -357,6 +388,34 @@ int EdgeMatch::find_edge_model_path(IN const char* picPath, IN const char* model
 		{
 			for (int i = ModelInfo->PyrNumber - 2; i > -1; i--)
 			{
+				if (modelGradX != nullptr)
+				{
+					delete[]modelGradX;
+					modelGradX = nullptr;
+				}
+				modelGradX = new float[ModelInfo->EdgeModelBaseInfoSize[i]];
+
+				if (modelGradY != nullptr)
+				{
+					delete[]modelGradY;
+					modelGradY = nullptr;
+				}
+				modelGradY = new float[ModelInfo->EdgeModelBaseInfoSize[i]];
+
+				if (modelCenterX != nullptr)
+				{
+					delete[]modelCenterX;
+					modelCenterX = nullptr;
+				}
+				modelCenterX = new float[ModelInfo->EdgeModelBaseInfoSize[i]];
+
+				if (modelCenterY != nullptr)
+				{
+					delete[]modelCenterY;
+					modelCenterY = nullptr;
+				}
+				modelCenterY = new float[ModelInfo->EdgeModelBaseInfoSize[i]];
+
 				center[1] = 2 * searchInfo.CenterX - 10;
 				center[3] = 2 * searchInfo.CenterX + 10;
 				center[0] = 2 * searchInfo.CenterY - 10;
@@ -366,7 +425,7 @@ int EdgeMatch::find_edge_model_path(IN const char* picPath, IN const char* model
 				float step = ModelInfo->StepAngle * pow(2, i);
 				float startAngle = searchInfo.Angle - step;
 				float endAngle = searchInfo.Angle + step;
-				for (float angle = startAngle; angle < endAngle; angle += step)
+				for (float angle = startAngle; angle <= endAngle; angle += step)
 				{
 #ifdef Paraller_Rotate
 					parallel_for_(cv::Range(0, ModelInfo->EdgeModelBaseInfoSize[i]),
@@ -378,7 +437,6 @@ int EdgeMatch::find_edge_model_path(IN const char* picPath, IN const char* model
 						ModelInfo->EdgeModelBaseInfoSize[i],
 						angle, modelGradX, modelGradY, modelCenterX, modelCenterY);
 #endif
-
 #ifdef Paraller_Search
 					parallel_for_(cv::Range(center[0], center[2]),
 						Paraller_SearchMatchModel(pyrSobelX[i],
@@ -407,7 +465,7 @@ int EdgeMatch::find_edge_model_path(IN const char* picPath, IN const char* model
 			rotateGradInfo(ModelInfo->EdgeModelBaseInfos[0],
 				ModelInfo->EdgeModelBaseInfoSize[0],
 				searchInfo.Angle, modelGradX, modelGradY, modelCenterX, modelCenterY);
-			cv::Mat img = pyrImage[0];
+			cv::Mat img = src;
 			drawContours(img,
 				modelCenterX, modelCenterY,
 				ModelInfo->EdgeModelBaseInfoSize[0],
@@ -451,34 +509,6 @@ int EdgeMatch::find_edge_model_path(IN const char* picPath, IN const char* model
 void EdgeMatch::rotateGradInfo(IN EdgeModelBaseInfo*& modelInfo, IN uint length, IN float angle,
 	OUT float*& modelGradX, OUT float*& modelGradY, OUT float*& modelContourX, OUT float*& modelContourY)
 {
-	if (modelGradX != nullptr)
-	{
-		delete[]modelGradX;
-		modelGradX = nullptr;
-	}
-	modelGradX = new float[length];
-
-	if (modelGradY != nullptr)
-	{
-		delete[]modelGradY;
-		modelGradY = nullptr;
-	}
-	modelGradY = new float[length];
-
-	if (modelContourX != nullptr)
-	{
-		delete[]modelContourX;
-		modelContourX = nullptr;
-	}
-	modelContourX = new float[length];
-
-	if (modelContourY != nullptr)
-	{
-		delete[]modelContourY;
-		modelContourY = nullptr;
-	}
-	modelContourY = new float[length];
-
 	float rotRad = angle * M_PI / 180;
 	float sinA = sin(rotRad);
 	float cosA = cos(rotRad);
@@ -559,12 +589,12 @@ void EdgeMatch::searchMatchModel(IN cv::Mat& dstSobleX, IN cv::Mat& dstSobleY, I
 	float NormGreediness = (1 - greediness * minScore) / (1 - greediness) / length;
 	float NormMinScore = minScore / length;
 
-	float* pSobleX = nullptr;
-	float* pSobleY = nullptr;
+	short* pSobleX = nullptr;
+	short* pSobleY = nullptr;
 	if (dstSobleX.isContinuous() && dstSobleY.isContinuous())
 	{
-		pSobleX = (float*)dstSobleX.ptr();
-		pSobleY = (float*)dstSobleY.ptr();
+		pSobleX = (short*)dstSobleX.ptr();
+		pSobleY = (short*)dstSobleY.ptr();
 	}
 
 	for (uint y = center[0]; y < center[2]; y++)
@@ -608,8 +638,8 @@ void EdgeMatch::searchMatchModel(IN cv::Mat& dstSobleX, IN cv::Mat& dstSobleY, I
 						}
 						else
 						{
-							_gx.m256_f32[k] = dstSobleX.at<float>(_curY.m256i_i32[k], _curX.m256i_i32[k]);
-							_gy.m256_f32[k] = dstSobleY.at<float>(_curY.m256i_i32[k], _curX.m256i_i32[k]);
+							_gx.m256_f32[k] = dstSobleX.at<short>(_curY.m256i_i32[k], _curX.m256i_i32[k]);
+							_gy.m256_f32[k] = dstSobleY.at<short>(_curY.m256i_i32[k], _curX.m256i_i32[k]);
 						}
 					}
 				}
@@ -626,10 +656,8 @@ void EdgeMatch::searchMatchModel(IN cv::Mat& dstSobleX, IN cv::Mat& dstSobleY, I
 						partialScore += _value.m256_f32[k];
 
 						score = partialScore / sum;
-						if (score < NormMinScore * (index + 1))
+						if (score < (min((minScore - 1) + NormGreediness * sum, NormMinScore * sum)))
 							goto Next;
-						//if (score < (min((minScore - 1) + NormGreediness * sum, NormMinScore * sum)))
-						//	break;
 					}
 				}
 			}
@@ -652,8 +680,8 @@ void EdgeMatch::searchMatchModel(IN cv::Mat& dstSobleX, IN cv::Mat& dstSobleY, I
 				}
 				else
 				{
-					gx = dstSobleX.at<float>(curY, curX);
-					gy = dstSobleY.at<float>(curY, curX);
+					gx = dstSobleX.at<short>(curY, curX);
+					gy = dstSobleY.at<short>(curY, curX);
 				}
 
 				if (abs(gx) > 1e-7 || abs(gy) > 1e-7)
@@ -662,10 +690,8 @@ void EdgeMatch::searchMatchModel(IN cv::Mat& dstSobleX, IN cv::Mat& dstSobleY, I
 					partialScore += ((gx * modelGradX[index] + gy * modelGradY[index])) / grad;
 
 					score = partialScore / sum;
-					if (score < NormMinScore * (index + 1))
+					if (score < (min((minScore - 1) + NormGreediness * sum, NormMinScore * sum)))
 						break;
-					//if (score < (min((minScore - 1) + NormGreediness * sum, NormMinScore * sum)))
-					//	break;
 				}
 			}
 		Next:
@@ -689,8 +715,8 @@ void EdgeMatch::searchMatchModel(IN cv::Mat& dstSobleX, IN cv::Mat& dstSobleY, I
 				}
 				else
 				{
-					gx = dstSobleX.at<float>(curY, curX);
-					gy = dstSobleY.at<float>(curY, curX);
+					gx = dstSobleX.at<short>(curY, curX);
+					gy = dstSobleY.at<short>(curY, curX);
 				}
 
 				if (abs(gx) > 1e-7 || abs(gy) > 1e-7)
@@ -699,10 +725,8 @@ void EdgeMatch::searchMatchModel(IN cv::Mat& dstSobleX, IN cv::Mat& dstSobleY, I
 					partialScore += ((gx * modelGradX[index] + gy * modelGradY[index])) / grad;
 
 					score = partialScore / sum;
-					if (score < NormMinScore * (index + 1))
+					if (score < (min((minScore - 1) + NormGreediness * sum, NormMinScore * sum)))
 						break;
-					//if (score < (min((minScore - 1) + NormGreediness * sum, NormMinScore * sum)))
-					//	break;
 				}
 			}
 #endif
