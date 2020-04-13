@@ -50,6 +50,11 @@ int EdgeMatch::create_edge_model_path(IN cv::Mat& src, IN const char* modelID, I
 	ModelInfo->MinGray = minGray;
 	ModelInfo->MaxGray = maxGray;
 	ModelInfo->PyrNumber = pyrNum;
+	ModelInfo->Score = score;
+	ModelInfo->StartAngle = startAngle;
+	ModelInfo->EndAngle = endAngle;
+	ModelInfo->StepAngle = stepAngle;
+	ModelInfo->Greediness = greediness;
 
 	cv::Mat sobelX, sobleY;
 	cv::Sobel(src, sobelX, CV_32FC1, 1, 0, 3);
@@ -461,22 +466,25 @@ int EdgeMatch::find_edge_model_path(IN cv::Mat& src, IN const char* modelID)
 #endif
 				}
 			}
+			if (searchInfo.Angle >= ModelInfo->Score)
+			{
 #ifdef SavePNG
-			rotateGradInfo(ModelInfo->EdgeModelBaseInfos[0],
-				ModelInfo->EdgeModelBaseInfoSize[0],
-				searchInfo.Angle, modelGradX, modelGradY, modelCenterX, modelCenterY);
-			cv::Mat img = src;
-			drawContours(img,
-				modelCenterX, modelCenterY,
-				ModelInfo->EdgeModelBaseInfoSize[0],
-				searchInfo);
-			char buff[MAXBYTE];
-			SYSTEMTIME sys;
-			GetLocalTime(&sys);
-			sprintf_s(buff, "%04d-%02d-%02d-%02d-%02d-%02d-%03d.png",
-				sys.wYear, sys.wMonth, sys.wDay, sys.wHour, sys.wMinute, sys.wSecond, sys.wMilliseconds);
-			cv::imwrite(buff, img);
+				rotateGradInfo(ModelInfo->EdgeModelBaseInfos[0],
+					ModelInfo->EdgeModelBaseInfoSize[0],
+					searchInfo.Angle, modelGradX, modelGradY, modelCenterX, modelCenterY);
+				cv::Mat img = src;
+				drawContours(img,
+					modelCenterX, modelCenterY,
+					ModelInfo->EdgeModelBaseInfoSize[0],
+					searchInfo);
+				char buff[MAXBYTE];
+				SYSTEMTIME sys;
+				GetLocalTime(&sys);
+				sprintf_s(buff, "%04d-%02d-%02d-%02d-%02d-%02d-%03d.png",
+					sys.wYear, sys.wMonth, sys.wDay, sys.wHour, sys.wMinute, sys.wSecond, sys.wMilliseconds);
+				cv::imwrite(buff, img);
 #endif
+			}
 		}
 		if (modelGradX != nullptr)
 		{
