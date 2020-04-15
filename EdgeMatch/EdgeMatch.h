@@ -20,11 +20,13 @@
 #include <Windows.h>
 #include <iostream>
 
+#define RotateSearch
+#define Paraller_RotateSearch
 //#define Paraller_Rotate
 //#define Paraller_Search
-//#define DrawContours
 //#define SSE
-//#define SavePNG
+#define SavePNG
+//#define DrawContours
 #define PyrNum 5
 #define TestCount 1
 #define SSEStep 8
@@ -188,6 +190,67 @@ private:
 	*/
 	void normalContourPoints(IN OUT std::vector<EdgeModelBaseInfo>& gradData);
 
+	/** @brief 绘制轮廓信息
+
+		@anchor drawContours
+
+		@param img 图像
+		@param modelContourX 轮廓点x坐标集合
+		@param modelContourY 轮廓点y坐标集合
+		@param length 轮廓点数量
+		@param searchInfo 搜索结果
+	*/
+	void drawContours(IN cv::Mat& img, IN float*& modelContourX, IN float*& modelContourY, IN int length, IN EdgeModelSearchInfo& searchInfo);
+
+	void find_edge_model(IN cv::Mat& dstSobleX,
+		IN cv::Mat& dstSobleY,
+		IN uint* center,
+		IN EdgeModelBaseInfo*& modelInfo,
+		IN float*& modelGradX,
+		IN float*& modelGradY,
+		IN float*& modelCenterX,
+		IN float*& modelCenterY,
+		IN int& length,
+		IN float& startAngle,
+		IN float& endAngle,
+		IN float& step,
+		IN float minScore,
+		IN float greediness,
+		OUT EdgeModelSearchInfo& searchInfo);
+
+public:
+
+	/** @brief 基于图片创建边缘模版
+
+		返回值 1-创建成功
+
+		@anchor create_edge_model_path
+
+		@param picPath 图片路径
+		@param modelID 模型ID
+		@param minGray 最下灰度值
+		@param maxGray 最大灰度值
+		@param pyrNum 金字塔层数
+		@param score 最小相似度
+		@param startAngle 搜索起始角度
+		@param endAngle 搜索终止角度
+		@param stepAngle 搜索步进角度
+		@param greediness 贪婪值
+	*/
+	int create_edge_model_path(IN cv::Mat& src, IN const char* modelID, IN int minGray, IN int maxGray, IN int pyrNum,
+		IN float score, IN float startAngle, IN float endAngle, IN float stepAngle, IN float greediness);
+
+	/** @brief 基于图片查找模版
+
+		返回值 1-查找成功;0-失败
+
+		@anchor find_edge_model_path
+
+		@param picPath 图片路径
+		@param modelID 模型ID
+	*/
+	int find_edge_model_path(IN cv::Mat& src, IN const char* modelID);
+
 	/** @brief 旋转模型信息
 
 		@anchor rotateGradInfo
@@ -224,51 +287,6 @@ private:
 		IN float minScore, IN float greediness, IN float angle, IN uint length,
 		IN float*& modelGradX, IN float*& modelGradY, IN float*& modelContourX, IN float*& modelContourY,
 		OUT EdgeModelSearchInfo& searchInfo);
-
-	/** @brief 绘制轮廓信息
-
-		@anchor drawContours
-
-		@param img 图像
-		@param modelContourX 轮廓点x坐标集合
-		@param modelContourY 轮廓点y坐标集合
-		@param length 轮廓点数量
-		@param searchInfo 搜索结果
-	*/
-	void drawContours(IN cv::Mat& img, IN float*& modelContourX, IN float*& modelContourY, IN int length, IN EdgeModelSearchInfo& searchInfo);
-
-public:
-
-	/** @brief 基于图片创建边缘模版
-
-		返回值 1-创建成功
-
-		@anchor create_edge_model_path
-
-		@param picPath 图片路径
-		@param modelID 模型ID
-		@param minGray 最下灰度值
-		@param maxGray 最大灰度值
-		@param pyrNum 金字塔层数
-		@param score 最小相似度
-		@param startAngle 搜索起始角度
-		@param endAngle 搜索终止角度
-		@param stepAngle 搜索步进角度
-		@param greediness 贪婪值
-	*/
-	int create_edge_model_path(IN cv::Mat& src, IN const char* modelID, IN int minGray, IN int maxGray, IN int pyrNum,
-		IN float score, IN float startAngle, IN float endAngle, IN float stepAngle, IN float greediness);
-
-	/** @brief 基于图片查找模版
-
-		返回值 1-查找成功;0-失败
-
-		@anchor find_edge_model_path
-
-		@param picPath 图片路径
-		@param modelID 模型ID
-	*/
-	int find_edge_model_path(IN cv::Mat& src, IN const char* modelID);
 
 public:
 
@@ -517,6 +535,67 @@ public:
 					}
 				}
 			}
+		}
+	}
+};
+
+#endif
+
+
+#ifdef Paraller_RotateSearch
+
+class Paraller_FindEdgeModel :public cv::ParallelLoopBody
+{
+private:
+	cv::Mat& dstSobleX;
+	cv::Mat& dstSobleY;
+	uint*& center;
+	EdgeModelBaseInfo*& modelInfo;
+	float*& modelGradX;
+	float*& modelGradY;
+	float*& modelCenterX;
+	float*& modelCenterY;
+	int& length;
+	float& step;
+	float& minScore;
+	float& greediness;
+	EdgeModelSearchInfo& searchInfo;
+
+public:
+	Paraller_FindEdgeModel(IN cv::Mat& _dstSobleX, IN cv::Mat& _dstSobleY,
+		IN uint* _center, IN EdgeModelBaseInfo*& _modelInfo,
+		IN float*& _modelGradX, IN float*& _modelGradY,
+		IN float*& _modelCenterX, IN float*& _modelCenterY,
+		IN int& _length, IN float& _step,
+		IN float _minScore, IN float _greediness,
+		OUT EdgeModelSearchInfo& _searchInfo)
+		: dstSobleX(_dstSobleX), dstSobleY(_dstSobleY),
+		center(_center), modelInfo(_modelInfo),
+		modelGradX(_modelGradX), modelGradY(_modelGradY),
+		modelCenterX(_modelCenterX), modelCenterY(_modelCenterY),
+		length(_length), step(_step),
+		minScore(_minScore), greediness(_greediness),
+		searchInfo(_searchInfo)
+	{
+
+	}
+
+	virtual void operator()(const cv::Range& r) const
+	{
+		for (int angle = r.start; angle != r.end; angle += step)
+		{
+			EdgeMatch::GetInstance().rotateGradInfo(modelInfo, length,
+				angle, modelGradX, modelGradY, modelCenterX, modelCenterY);
+
+			EdgeMatch::GetInstance().searchMatchModel(dstSobleX,
+				dstSobleY,
+				center,
+				minScore,
+				greediness,
+				angle,
+				length,
+				modelGradX, modelGradY, modelCenterX, modelCenterY,
+				searchInfo);
 		}
 	}
 };

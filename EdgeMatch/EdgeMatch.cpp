@@ -4,10 +4,13 @@
 #define _USE_MATH_DEFINES
 
 #include "EdgeMatch.h"
+#include "threadpool.h"
+
 #include <math.h>
 #include <map>
 
 #pragma comment(lib, "Rpcrt4.lib")
+
 
 int main()
 {
@@ -16,8 +19,8 @@ int main()
 	LARGE_INTEGER nBeginTime;
 	LARGE_INTEGER nEndTime;
 	QueryPerformanceFrequency(&nFreq);
-	QueryPerformanceCounter(&nBeginTime);
 	cv::Mat temImg = cv::imread("D:\\Download\\边缘匹配\\template.jpg", cv::IMREAD_GRAYSCALE);
+	QueryPerformanceCounter(&nBeginTime);
 	for (size_t i = 0; i < TestCount; i++)
 	{
 		EdgeMatch::GetInstance().create_edge_model_path(temImg,
@@ -28,8 +31,8 @@ int main()
 	std::cout << "创建模型消耗时间(ms)：" << time << std::endl;
 
 
-	QueryPerformanceCounter(&nBeginTime);
 	cv::Mat dstImg = cv::imread("D:\\Download\\边缘匹配\\search.jpg", cv::IMREAD_GRAYSCALE);
+	QueryPerformanceCounter(&nBeginTime);
 	for (size_t i = 0; i < TestCount; i++)
 	{
 		EdgeMatch::GetInstance().find_edge_model_path(dstImg,
@@ -295,6 +298,13 @@ int EdgeMatch::find_edge_model_path(IN cv::Mat& src, IN const char* modelID)
 	UuidFromStringA((RPC_CSTR)modelID, &id);
 	if (ModelInfo != nullptr && ModelInfo->ModelID == id)
 	{
+		double time = 0;
+		LARGE_INTEGER nFreq;
+		LARGE_INTEGER nBeginTime;
+		LARGE_INTEGER nEndTime;
+		QueryPerformanceFrequency(&nFreq);
+		QueryPerformanceCounter(&nBeginTime);
+
 		cv::Mat sobelX, sobleY;
 		cv::Sobel(src, sobelX, CV_16SC1, 1, 0, 3);
 		cv::Sobel(src, sobleY, CV_16SC1, 0, 1, 3);
@@ -303,6 +313,13 @@ int EdgeMatch::find_edge_model_path(IN cv::Mat& src, IN const char* modelID)
 		getPyrImage(sobelX, ModelInfo->PyrNumber, pyrSobelX);
 		getPyrImage(sobleY, ModelInfo->PyrNumber, pyrSobelY);
 
+		QueryPerformanceCounter(&nEndTime);
+		time = (1000.0 / TestCount) * (nEndTime.QuadPart - nBeginTime.QuadPart) / (double)nFreq.QuadPart;
+		std::cout << "搜索模型[Init]消耗时间(ms)：" << time << std::endl;
+
+
+
+		QueryPerformanceCounter(&nBeginTime);
 		EdgeModelSearchInfo searchInfo;
 
 		if (abs(ModelInfo->StepAngle) < 1e-7)ModelInfo->StepAngle = 1;
@@ -343,6 +360,31 @@ int EdgeMatch::find_edge_model_path(IN cv::Mat& src, IN const char* modelID)
 			modelCenterY = new float[ModelInfo->EdgeModelBaseInfoSize[ModelInfo->PyrNumber - 1]];
 
 			float step = ModelInfo->StepAngle * pow(2, ModelInfo->PyrNumber - 1);
+#ifdef RotateSearch
+
+#ifdef Paraller_RotateSearch
+			Paraller_FindEdgeModel a(pyrSobelX[ModelInfo->PyrNumber - 1],
+				pyrSobelY[ModelInfo->PyrNumber - 1],
+				center,
+				ModelInfo->EdgeModelBaseInfos[ModelInfo->PyrNumber - 1],
+				modelGradX, modelGradY, modelCenterX, modelCenterY,
+				ModelInfo->EdgeModelBaseInfoSize[ModelInfo->PyrNumber - 1],
+				step, ModelInfo->Score, ModelInfo->Greediness, searchInfo);
+			parallel_for_(cv::Range(ModelInfo->StartAngle, ModelInfo->EndAngle), a);
+#else
+			find_edge_model(pyrSobelX[ModelInfo->PyrNumber - 1], 
+				pyrSobelY[ModelInfo->PyrNumber - 1],
+				center,
+				ModelInfo->EdgeModelBaseInfos[ModelInfo->PyrNumber - 1],
+				modelGradX, modelGradY, modelCenterX, modelCenterY,
+				ModelInfo->EdgeModelBaseInfoSize[ModelInfo->PyrNumber - 1],
+				ModelInfo->StartAngle, ModelInfo->EndAngle, step,
+				ModelInfo->Score,
+				ModelInfo->Greediness,
+				searchInfo);
+#endif
+#else
+			
 			for (float angle = ModelInfo->StartAngle; angle <= ModelInfo->EndAngle; angle += step)
 			{
 #ifdef Paraller_Rotate
@@ -379,18 +421,13 @@ int EdgeMatch::find_edge_model_path(IN cv::Mat& src, IN const char* modelID)
 					searchInfo);
 #endif
 			}
-#ifdef DrawContours
-			rotateGradInfo(ModelInfo->EdgeModelBaseInfos[ModelInfo->PyrNumber - 1],
-				ModelInfo->EdgeModelBaseInfoSize[ModelInfo->PyrNumber - 1],
-				searchInfo.Angle, modelGradX, modelGradY, modelCenterX, modelCenterY);
-			cv::Mat img = pyrImage[ModelInfo->PyrNumber - 1];
-			drawContours(img,
-				modelCenterX, modelCenterY,
-				ModelInfo->EdgeModelBaseInfoSize[ModelInfo->PyrNumber - 1],
-				searchInfo);
+			QueryPerformanceCounter(&nEndTime);
+			time = (1000.0 / TestCount) * (nEndTime.QuadPart - nBeginTime.QuadPart) / (double)nFreq.QuadPart;
+			std::cout << "搜索模型[顶层查找]消耗时间(ms)：" << time << std::endl;
 #endif
 		}
 		{
+			QueryPerformanceCounter(&nBeginTime);
 			for (int i = ModelInfo->PyrNumber - 2; i > -1; i--)
 			{
 				if (modelGradX != nullptr)
@@ -430,6 +467,30 @@ int EdgeMatch::find_edge_model_path(IN cv::Mat& src, IN const char* modelID)
 				float step = ModelInfo->StepAngle * pow(2, i);
 				float startAngle = searchInfo.Angle - step;
 				float endAngle = searchInfo.Angle + step;
+#ifdef RotateSearch
+
+#ifdef Paraller_RotateSearch
+				Paraller_FindEdgeModel a(pyrSobelX[i],
+					pyrSobelY[i],
+					center,
+					ModelInfo->EdgeModelBaseInfos[i],
+					modelGradX, modelGradY, modelCenterX, modelCenterY,
+					ModelInfo->EdgeModelBaseInfoSize[i],
+					step, ModelInfo->Score, ModelInfo->Greediness, searchInfo);
+				parallel_for_(cv::Range(startAngle, endAngle), a);
+#else
+				find_edge_model(pyrSobelX[i],
+					pyrSobelY[i],
+					center,
+					ModelInfo->EdgeModelBaseInfos[i],
+					modelGradX, modelGradY, modelCenterX, modelCenterY,
+					ModelInfo->EdgeModelBaseInfoSize[i],
+					startAngle, endAngle, step,
+					ModelInfo->Score,
+					ModelInfo->Greediness,
+					searchInfo);
+#endif
+#else
 				for (float angle = startAngle; angle <= endAngle; angle += step)
 				{
 #ifdef Paraller_Rotate
@@ -465,8 +526,12 @@ int EdgeMatch::find_edge_model_path(IN cv::Mat& src, IN const char* modelID)
 						searchInfo);
 #endif
 				}
+#endif
 			}
-			if (searchInfo.Angle >= ModelInfo->Score)
+			QueryPerformanceCounter(&nEndTime);
+			time = (1000.0 / TestCount) * (nEndTime.QuadPart - nBeginTime.QuadPart) / (double)nFreq.QuadPart;
+			std::cout << "搜索模型[其余层查找]消耗时间(ms)：" << time << std::endl;
+			if (searchInfo.Score >= ModelInfo->Score)
 			{
 #ifdef SavePNG
 				rotateGradInfo(ModelInfo->EdgeModelBaseInfos[0],
@@ -512,6 +577,66 @@ int EdgeMatch::find_edge_model_path(IN cv::Mat& src, IN const char* modelID)
 		return 0;
 	}
 	return 1;
+}
+
+void EdgeMatch::find_edge_model(IN cv::Mat& dstSobleX,
+	IN cv::Mat& dstSobleY,
+	IN uint* center,
+	IN EdgeModelBaseInfo*& modelInfo,
+	IN float*& modelGradX,
+	IN float*& modelGradY,
+	IN float*& modelCenterX,
+	IN float*& modelCenterY,
+	IN int& length,
+	IN float& startAngle,
+	IN float& endAngle,
+	IN float& step,
+	IN float minScore, 
+	IN float greediness,
+	OUT EdgeModelSearchInfo& searchInfo)
+{
+	if (modelGradX != nullptr)
+	{
+		delete[]modelGradX;
+		modelGradX = nullptr;
+	}
+	modelGradX = new float[length];
+
+	if (modelGradY != nullptr)
+	{
+		delete[]modelGradY;
+		modelGradY = nullptr;
+	}
+	modelGradY = new float[length];
+
+	if (modelCenterX != nullptr)
+	{
+		delete[]modelCenterX;
+		modelCenterX = nullptr;
+	}
+	modelCenterX = new float[length];
+
+	if (modelCenterY != nullptr)
+	{
+		delete[]modelCenterY;
+		modelCenterY = nullptr;
+	}
+	modelCenterY = new float[length];
+
+	for (float angle = startAngle; angle <= endAngle; angle += step)
+	{
+		rotateGradInfo(modelInfo, length, angle, modelGradX, modelGradY, modelCenterX, modelCenterY);
+
+		searchMatchModel(dstSobleX,
+			dstSobleY,
+			center,
+			minScore,
+			greediness,
+			angle,
+			length,
+			modelGradX, modelGradY, modelCenterX, modelCenterY,
+			searchInfo);
+	}
 }
 
 void EdgeMatch::rotateGradInfo(IN EdgeModelBaseInfo*& modelInfo, IN uint length, IN float angle,
