@@ -25,7 +25,7 @@
 //#define Paraller_Rotate
 //#define Paraller_Search
 //#define SSE
-#define SavePNG
+//#define SavePNG
 //#define DrawContours
 #define PyrNum 5
 #define TestCount 1
@@ -551,11 +551,9 @@ private:
 	cv::Mat& dstSobleY;
 	uint*& center;
 	EdgeModelBaseInfo*& modelInfo;
-	float*& modelGradX;
-	float*& modelGradY;
-	float*& modelCenterX;
-	float*& modelCenterY;
 	int& length;
+	float& startAngle;
+	float& endAngle;
 	float& step;
 	float& minScore;
 	float& greediness;
@@ -564,16 +562,14 @@ private:
 public:
 	Paraller_FindEdgeModel(IN cv::Mat& _dstSobleX, IN cv::Mat& _dstSobleY,
 		IN uint* _center, IN EdgeModelBaseInfo*& _modelInfo,
-		IN float*& _modelGradX, IN float*& _modelGradY,
-		IN float*& _modelCenterX, IN float*& _modelCenterY,
-		IN int& _length, IN float& _step,
+		IN int& _length, IN float& _startAngle,
+		IN float& _endAngle, IN float& _step,
 		IN float _minScore, IN float _greediness,
 		OUT EdgeModelSearchInfo& _searchInfo)
 		: dstSobleX(_dstSobleX), dstSobleY(_dstSobleY),
 		center(_center), modelInfo(_modelInfo),
-		modelGradX(_modelGradX), modelGradY(_modelGradY),
-		modelCenterX(_modelCenterX), modelCenterY(_modelCenterY),
-		length(_length), step(_step),
+		length(_length), startAngle(_startAngle),
+		endAngle(_endAngle), step(_step),
 		minScore(_minScore), greediness(_greediness),
 		searchInfo(_searchInfo)
 	{
@@ -582,20 +578,50 @@ public:
 
 	virtual void operator()(const cv::Range& r) const
 	{
-		for (int angle = r.start; angle != r.end; angle += step)
+		for (int i = r.start; i != r.end; i++)
 		{
-			EdgeMatch::GetInstance().rotateGradInfo(modelInfo, length,
-				angle, modelGradX, modelGradY, modelCenterX, modelCenterY);
+			float angle = startAngle + step * i;
+			if (angle <= endAngle)
+			{
+				float* modelGradX = new float[length];
+				float* modelGradY = new float[length];
+				float* modelCenterX = new float[length];
+				float* modelCenterY = new float[length];
 
-			EdgeMatch::GetInstance().searchMatchModel(dstSobleX,
-				dstSobleY,
-				center,
-				minScore,
-				greediness,
-				angle,
-				length,
-				modelGradX, modelGradY, modelCenterX, modelCenterY,
-				searchInfo);
+				EdgeMatch::GetInstance().rotateGradInfo(modelInfo, length,
+					angle, modelGradX, modelGradY, modelCenterX, modelCenterY);
+
+				EdgeMatch::GetInstance().searchMatchModel(dstSobleX,
+					dstSobleY,
+					center,
+					minScore,
+					greediness,
+					angle,
+					length,
+					modelGradX, modelGradY, modelCenterX, modelCenterY,
+					searchInfo);
+
+				if (modelGradX != nullptr)
+				{
+					delete[]modelGradX;
+					modelGradX = nullptr;
+				}
+				if (modelGradY != nullptr)
+				{
+					delete[]modelGradY;
+					modelGradY = nullptr;
+				}
+				if (modelCenterX != nullptr)
+				{
+					delete[]modelCenterX;
+					modelCenterX = nullptr;
+				}
+				if (modelCenterY != nullptr)
+				{
+					delete[]modelCenterY;
+					modelCenterY = nullptr;
+				}
+			}
 		}
 	}
 };
