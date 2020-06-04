@@ -198,7 +198,7 @@ void EdgeMatch::createGradInfo(IN cv::Mat pyrImage, IN cv::Mat pyrSobelX, IN cv:
 			gy = pyrSobelY.at<float>(contoursQuery[j]);
 		}
 
-		if (abs(gx) > 10 || abs(gy) > 10)
+		if (abs(gx) > 0 || abs(gy) > 0)
 		{
 			float grad = sqrt(gx * gx + gy * gy);
 			gradInfo.grad_x = gx / grad;
@@ -230,7 +230,7 @@ void EdgeMatch::createGradInfo(IN cv::Mat pyrImage, IN cv::Mat pyrSobelX, IN cv:
 			gy = pyrSobelY.at<float>(contoursQuery[j]);
 		}
 
-		if (abs(gx) > 10 || abs(gy) > 10)
+		if (abs(gx) > 0 || abs(gy) > 0)
 		{
 			float grad = sqrt(gx * gx + gy * gy);
 			gradInfo.grad_x = gx / grad;
@@ -771,11 +771,10 @@ void EdgeMatch::searchMatchModel(IN cv::Mat& dstSobleX, IN cv::Mat& dstSobleY, I
 					if (abs(_gx.m256_f32[k]) > 1e-7 || abs(_gy.m256_f32[k]) > 1e-7)
 					{
 						partialScore += _value.m256_f32[k];
-
-						score = partialScore / sum;
-						if (score < (min((minScore - 1) + NormGreediness * sum, NormMinScore * sum)))
-							goto Next;
 					}
+					score = partialScore / sum;
+					if (score < (min((minScore - 1) + NormGreediness * sum, NormMinScore * sum)))
+						goto Next;
 				}
 			}
 			for (uint index = length - count2; index < length; index++)
@@ -805,11 +804,10 @@ void EdgeMatch::searchMatchModel(IN cv::Mat& dstSobleX, IN cv::Mat& dstSobleY, I
 				{
 					float grad = sqrt(gx * gx + gy * gy);
 					partialScore += ((gx * modelGradX[index] + gy * modelGradY[index])) / grad;
-
-					score = partialScore / sum;
-					if (score < (min((minScore - 1) + NormGreediness * sum, NormMinScore * sum)))
-						break;
 				}
+				score = partialScore / sum;
+				if (score < (min((minScore - 1) + NormGreediness * sum, NormMinScore * sum)))
+					break;
 			}
 		Next:
 #else
@@ -840,11 +838,10 @@ void EdgeMatch::searchMatchModel(IN cv::Mat& dstSobleX, IN cv::Mat& dstSobleY, I
 				{
 					float grad = sqrt(gx * gx + gy * gy);
 					partialScore += ((gx * modelGradX[index] + gy * modelGradY[index])) / grad;
-
-					score = partialScore / sum;
-					if (score < (min((minScore - 1) + NormGreediness * sum, NormMinScore * sum)))
-						break;
 				}
+				score = partialScore / sum;
+				if (score < (min((minScore - 1) + NormGreediness * sum, NormMinScore * sum)))
+					break;
 			}
 #endif
 			if (score > searchInfo.Score)

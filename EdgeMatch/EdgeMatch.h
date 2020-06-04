@@ -446,11 +446,10 @@ public:
 						if (abs(_gx.m256_f32[k]) > 1e-7 || abs(_gy.m256_f32[k]) > 1e-7)
 						{
 							partialScore += _graddot.m256_f32[k] / _grad.m256_f32[k];
-
-							score = partialScore / (sum + k - (SSEStep - 1));
-							if (score < (min((minScore - 1) + NormGreediness * sum, NormMinScore * sum)))
-								goto Next;
 						}
+						score = partialScore / (sum + k - (SSEStep - 1));
+						if (score < (min((minScore - 1) + NormGreediness * sum, NormMinScore * sum)))
+							goto Next;
 					}
 				}
 				for (uint index = length - count2; index < length; index++)
@@ -480,11 +479,10 @@ public:
 					{
 						float grad = sqrt(gx * gx + gy * gy);
 						partialScore += ((gx * modelGradX[index] + gy * modelGradY[index])) / grad;
-
-						score = partialScore / sum;
-						if (score < (min((minScore - 1) + NormGreediness * sum, NormMinScore * sum)))
-							break;
 					}
+					score = partialScore / sum;
+					if (score < (min((minScore - 1) + NormGreediness * sum, NormMinScore * sum)))
+						break;
 				}
 			Next:
 #else
@@ -514,11 +512,10 @@ public:
 					{
 						float grad = sqrt(gx * gx + gy * gy);
 						partialScore += ((gx * modelGradX[index] + gy * modelGradY[index])) / grad;
-
-						score = partialScore / sum;
-						if (score < (min((minScore - 1) + NormGreediness * sum, NormMinScore * sum)))
-							break;
 					}
+					score = partialScore / sum;
+					if (score < (min((minScore - 1) + NormGreediness * sum, NormMinScore * sum)))
+						break;
 				}
 #endif
 
