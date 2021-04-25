@@ -1,20 +1,31 @@
 ﻿#pragma once
 
-#ifdef _WIN64
+#define USE_OPENCV
 
-#if _DEBUG
-#pragma comment (lib,"opencv_world420d.lib")
+#ifdef USE_OPENCV
+
+#ifndef CV
+#define CV
+
+#include <opencv2/opencv.hpp>
+
+#define CV_VERSION_ID  CVAUX_STR(CV_MAJOR_VERSION) CVAUX_STR(CV_MINOR_VERSION) CVAUX_STR(CV_SUBMINOR_VERSION)
+
+#ifdef _DEBUG
+#define cvLIB(name) "opencv_" name CV_VERSION_ID "d"
 #else
-#pragma comment (lib,"opencv_world420.lib")
+#define cvLIB(name) "opencv_" name CV_VERSION_ID
 #endif
 
-#else
-#endif
+#pragma comment(lib, cvLIB("world"))
 
-#include <opencv2/imgproc.hpp>
-#include <opencv2/imgcodecs.hpp>
-#include <opencv2/highgui.hpp>
+#endif // !CV
 
+#endif // USE_OPENCV
+
+
+#include <mutex>
+#include <condition_variable>
 #include <guiddef.h>
 #include <vector>
 #include <Windows.h>
@@ -22,11 +33,11 @@
 
 #define RotateSearch
 #define Paraller_RotateSearch
-//#define Paraller_Rotate
-//#define Paraller_Search
-//#define SSE
-//#define SavePNG
-//#define DrawContours
+#define Paraller_Rotate
+#define Paraller_Search
+#define SSE
+#define SavePNG
+#define DrawContours
 #define PyrNum 5
 #define TestCount 1
 #define SSEStep 8
@@ -84,7 +95,7 @@ struct EdgeModelInfo
 		StartAngle = -45;
 		EndAngle = 45;
 		StepAngle = 1;
-		Greediness = 0.9;
+		Greediness = 0.9f;
 		EdgeModelBaseInfoSize = nullptr;
 		EdgeModelBaseInfos = nullptr;
 	}
@@ -204,7 +215,7 @@ private:
 
 	void find_edge_model(IN cv::Mat& dstSobleX,
 		IN cv::Mat& dstSobleY,
-		IN uint* center,
+		IN int* center,
 		IN EdgeModelBaseInfo*& modelInfo,
 		IN float*& modelGradX,
 		IN float*& modelGradY,
@@ -283,8 +294,8 @@ public:
 		@param modelContourY 模版轮廓点y坐标
 		@param searchInfo 搜索结果
 	*/
-	void searchMatchModel(IN cv::Mat& dstSobleX, IN cv::Mat& dstSobleY, IN uint* center,
-		IN float minScore, IN float greediness, IN float angle, IN uint length,
+	void searchMatchModel(IN cv::Mat& dstSobleX, IN cv::Mat& dstSobleY, IN int* center,
+		IN float minScore, IN float greediness, IN float angle, IN int length,
 		IN float*& modelGradX, IN float*& modelGradY, IN float*& modelContourX, IN float*& modelContourY,
 		OUT EdgeModelSearchInfo& searchInfo);
 
@@ -325,7 +336,7 @@ public:
 
 	virtual void operator()(const cv::Range& r) const
 	{
-		float rotRad = angle * M_PI / 180;
+		float rotRad = (float)(angle * M_PI / 180);
 		float sinA = sin(rotRad);
 		float cosA = cos(rotRad);
 		for (int i = r.start; i != r.end; i++)
@@ -350,11 +361,11 @@ class Paraller_SearchMatchModel :public cv::ParallelLoopBody
 private:
 	cv::Mat& dstSobleX;
 	cv::Mat& dstSobleY;
-	uint*& center;
+	int*& center;
 	float& minScore;
 	float& greediness;
 	float& angle;
-	uint& length;
+	int& length;
 	float*& modelGradX;
 	float*& modelGradY;
 	float*& modelContourX;
@@ -363,8 +374,8 @@ private:
 
 
 public:
-	Paraller_SearchMatchModel(IN cv::Mat& _dstSobleX, IN cv::Mat& _dstSobleY, IN uint* _center,
-		IN float _minScore, IN float _greediness, IN float _angle, IN uint _length,
+	Paraller_SearchMatchModel(IN cv::Mat& _dstSobleX, IN cv::Mat& _dstSobleY, IN int* _center,
+		IN float _minScore, IN float _greediness, IN float _angle, IN int _length,
 		IN float*& _modelGradX, IN float*& _modelGradY,
 		IN float*& _modelContourX, IN float*& _modelContourY,
 		OUT EdgeModelSearchInfo& _searchInfo)
@@ -389,25 +400,25 @@ public:
 			pSobleY = (short*)dstSobleY.ptr();
 		}
 
-		for (uint y = r.start; y < r.end; y++)
+		for (int y = r.start; y < r.end; y++)
 		{
-			for (uint x = center[1]; x < center[3]; x++)
+			for (int x = center[1]; x < center[3]; x++)
 			{
 				float partialScore = 0;
 				float score = 0;
-				uint sum = 0;
+				int sum = 0;
 
 #ifdef SSE
-				__m256 _x = _mm256_set1_ps(x);
-				__m256 _y = _mm256_set1_ps(y);
+				__m256 _x = _mm256_set1_ps(x * 1.0f);
+				__m256 _y = _mm256_set1_ps(y * 1.0f);
 				__m256i _curX = _mm256_setzero_si256();
 				__m256i _curY = _mm256_setzero_si256();
 				__m256 _gx = _mm256_set1_ps(0.0f);
 				__m256 _gy = _mm256_set1_ps(0.0f);
 
-				int count = length / SSEStep;
+				//int count = length / SSEStep;
 				int count2 = length & (SSEStep - 1);
-				for (uint index = 0; index < length - count2; index += SSEStep)
+				for (int index = 0; index < length - count2; index += SSEStep)
 				{
 					sum += SSEStep;
 
@@ -452,11 +463,11 @@ public:
 							goto Next;
 					}
 				}
-				for (uint index = length - count2; index < length; index++)
+				for (int index = length - count2; index < length; index++)
 				{
 					sum++;
-					uint curX = x + modelContourX[index];
-					uint curY = y + modelContourY[index];
+					int curX = (int)(x + modelContourX[index]);
+					int curY = (int)(y + modelContourY[index]);
 
 					if (curX > dstSobleX.cols - 1 || curY > dstSobleX.rows - 1)
 						continue;
@@ -465,7 +476,7 @@ public:
 					float gy = 0;
 					if (pSobleX != nullptr)
 					{
-						uint l = curY * dstSobleX.cols + curX;
+						int l = curY * dstSobleX.cols + curX;
 						gx = pSobleX[l];
 						gy = pSobleY[l];
 					}
@@ -486,11 +497,11 @@ public:
 				}
 			Next:
 #else
-				for (size_t index = 0; index < length; index++)
+				for (int index = 0; index < length; index++)
 				{
 					sum++;
-					int curX = x + modelContourX[index];
-					int curY = y + modelContourY[index];
+					int curX = (int)(x + modelContourX[index]);
+					int curY = (int)(y + modelContourY[index]);
 
 					if (curX < 0 || curY < 0 || curX > dstSobleX.cols - 1 || curY > dstSobleX.rows - 1)
 						continue;
@@ -527,8 +538,8 @@ public:
 					{
 						searchInfo.Score = score;
 						searchInfo.Angle = angle;
-						searchInfo.CenterX = x;
-						searchInfo.CenterY = y;
+						searchInfo.CenterX = x * 1.0f;
+						searchInfo.CenterY = y * 1.0f;
 					}
 				}
 			}
@@ -546,7 +557,7 @@ class Paraller_FindEdgeModel :public cv::ParallelLoopBody
 private:
 	cv::Mat& dstSobleX;
 	cv::Mat& dstSobleY;
-	uint*& center;
+	int*& center;
 	EdgeModelBaseInfo*& modelInfo;
 	int& length;
 	float& startAngle;
@@ -558,7 +569,7 @@ private:
 
 public:
 	Paraller_FindEdgeModel(IN cv::Mat& _dstSobleX, IN cv::Mat& _dstSobleY,
-		IN uint* _center, IN EdgeModelBaseInfo*& _modelInfo,
+		IN int* _center, IN EdgeModelBaseInfo*& _modelInfo,
 		IN int& _length, IN float& _startAngle,
 		IN float& _endAngle, IN float& _step,
 		IN float _minScore, IN float _greediness,

@@ -4,7 +4,7 @@
 #define _USE_MATH_DEFINES
 
 #include "EdgeMatch.h"
-#include "threadpool.h"
+
 
 #include <math.h>
 #include <map>
@@ -24,7 +24,7 @@ int main()
 	for (size_t i = 0; i < TestCount; i++)
 	{
 		EdgeMatch::GetInstance().create_edge_model_path(temImg,
-			"0d4ed8a0-9a35-42cb-ac77-b06c76ed13c8", 15, 30, PyrNum, 0.5, -45.0, 45.0, 1, 0.9);
+			"0d4ed8a0-9a35-42cb-ac77-b06c76ed13c8", 15, 30, PyrNum, 0.5f, -45.0f, 45.0f, 1.0f, 0.9f);
 	}
 	QueryPerformanceCounter(&nEndTime);
 	time = (1000.0 / TestCount) * (nEndTime.QuadPart - nBeginTime.QuadPart) / (double)nFreq.QuadPart;
@@ -78,7 +78,7 @@ int EdgeMatch::create_edge_model_path(IN cv::Mat& src, IN const char* modelID, I
 		deleteContourPoints(gradData);
 		normalContourPoints(gradData);
 		{
-			ModelInfo->EdgeModelBaseInfoSize[i] = gradData.size();
+			ModelInfo->EdgeModelBaseInfoSize[i] = (int)gradData.size();
 			ModelInfo->EdgeModelBaseInfos[i] = new EdgeModelBaseInfo[gradData.size()];
 			for (size_t j = 0; j < gradData.size(); j++)
 			{
@@ -129,9 +129,8 @@ void EdgeMatch::createGradInfo(IN cv::Mat pyrImage, IN cv::Mat pyrSobelX, IN cv:
 	__m256i _curX = _mm256_setzero_si256();
 	__m256i _curY = _mm256_setzero_si256();
 	__m256i cols = _mm256_set1_epi32(pyrSobelX.cols);
-	int count = contoursQuery.size() / SSEStep;
-	int count2 = contoursQuery.size() & (SSEStep - 1);
-	for (uint j = 0; j < contoursQuery.size() - count2; j += SSEStep)
+	int count2 = (int)(contoursQuery.size() & (SSEStep - 1));
+	for (int j = 0; j < contoursQuery.size() - count2; j += SSEStep)
 	{
 		if (pSobleX != nullptr)
 		{
@@ -147,7 +146,7 @@ void EdgeMatch::createGradInfo(IN cv::Mat pyrImage, IN cv::Mat pyrSobelX, IN cv:
 
 			__m256i l = _mm256_add_epi32(_curX, _mm256_mullo_epi32(_curY, cols));
 
-			for (uchar k = 0; k < SSEStep; k++)
+			for (int k = 0; k < SSEStep; k++)
 			{
 				_gx.m256_f32[SSEStep - 1 - k] = pSobleX[l.m256i_i32[k]];
 				_gy.m256_f32[SSEStep - 1 - k] = pSobleY[l.m256i_i32[k]];
@@ -155,7 +154,7 @@ void EdgeMatch::createGradInfo(IN cv::Mat pyrImage, IN cv::Mat pyrSobelX, IN cv:
 		}
 		else
 		{
-			for (uchar k = 0; k < SSEStep; k++)
+			for (int k = 0; k < SSEStep; k++)
 			{
 				_gx.m256_f32[k] = pyrSobelX.at<float>(contoursQuery[j + k]);
 				_gy.m256_f32[k] = pyrSobelY.at<float>(contoursQuery[j + k]);
@@ -168,7 +167,7 @@ void EdgeMatch::createGradInfo(IN cv::Mat pyrImage, IN cv::Mat pyrSobelX, IN cv:
 		__m256 gx_n = _mm256_mul_ps(_gx, magnitudeN);
 		__m256 gy_n = _mm256_mul_ps(_gy, magnitudeN);
 
-		for (uchar k = 0; k < SSEStep; k++)
+		for (int k = 0; k < SSEStep; k++)
 		{
 			EdgeModelBaseInfo gradInfo;
 			gradInfo.grad_x = gx_n.m256_f32[k];
@@ -180,7 +179,7 @@ void EdgeMatch::createGradInfo(IN cv::Mat pyrImage, IN cv::Mat pyrSobelX, IN cv:
 			gradData.push_back(gradInfo);
 		}
 	}
-	for (uint j = contoursQuery.size() - count2; j < contoursQuery.size(); j++)
+	for (int j = (int)(contoursQuery.size() - count2); j < contoursQuery.size(); j++)
 	{
 		EdgeModelBaseInfo gradInfo;
 
@@ -252,10 +251,10 @@ void EdgeMatch::deleteContourPoints(IN OUT std::vector<EdgeModelBaseInfo>& gradD
 
 	std::vector<EdgeModelBaseInfo> data;
 
-	for (size_t i = 0; i < gradData.size(); i += CullCount)
+	for (int i = 0; i < gradData.size(); i += CullCount)
 	{
 		std::map<float, int> culls;
-		for (size_t j = 0; j < CullCount; j++)
+		for (int j = 0; j < CullCount; j++)
 		{
 			if (i + j < gradData.size())
 			{
@@ -324,7 +323,7 @@ int EdgeMatch::find_edge_model_path(IN cv::Mat& src, IN const char* modelID)
 
 		if (abs(ModelInfo->StepAngle) < 1e-7)ModelInfo->StepAngle = 1;
 
-		uint center[] = { 0, 0, pyrSobelX[ModelInfo->PyrNumber - 1].rows, pyrSobelX[ModelInfo->PyrNumber - 1].cols };
+		int center[] = { 0, 0, pyrSobelX[ModelInfo->PyrNumber - 1].rows, pyrSobelX[ModelInfo->PyrNumber - 1].cols };
 		float* modelGradX = nullptr;
 		float* modelGradY = nullptr;
 		float* modelCenterX = nullptr;
@@ -359,11 +358,11 @@ int EdgeMatch::find_edge_model_path(IN cv::Mat& src, IN const char* modelID)
 			}
 			modelCenterY = new float[ModelInfo->EdgeModelBaseInfoSize[ModelInfo->PyrNumber - 1]];
 
-			float step = ModelInfo->StepAngle * pow(2, ModelInfo->PyrNumber - 1);
+			float step = (float)(ModelInfo->StepAngle * pow(2, ModelInfo->PyrNumber - 1));
 #ifdef RotateSearch
 
 #ifdef Paraller_RotateSearch
-			int index = ((int)(ModelInfo->EndAngle - ModelInfo->StartAngle) / step + 1);
+			int index = (int)((ModelInfo->EndAngle - ModelInfo->StartAngle) / step + 1);
 			Paraller_FindEdgeModel a(pyrSobelX[ModelInfo->PyrNumber - 1],
 				pyrSobelY[ModelInfo->PyrNumber - 1],
 				center,
@@ -373,7 +372,7 @@ int EdgeMatch::find_edge_model_path(IN cv::Mat& src, IN const char* modelID)
 				step, ModelInfo->Score, ModelInfo->Greediness, searchInfo);
 			parallel_for_(cv::Range(0, index), a);
 #else
-			find_edge_model(pyrSobelX[ModelInfo->PyrNumber - 1], 
+			find_edge_model(pyrSobelX[ModelInfo->PyrNumber - 1],
 				pyrSobelY[ModelInfo->PyrNumber - 1],
 				center,
 				ModelInfo->EdgeModelBaseInfos[ModelInfo->PyrNumber - 1],
@@ -468,19 +467,19 @@ int EdgeMatch::find_edge_model_path(IN cv::Mat& src, IN const char* modelID)
 				}
 				modelCenterY = new float[ModelInfo->EdgeModelBaseInfoSize[i]];
 
-				center[1] = 2 * searchInfo.CenterX - 10;
-				center[3] = 2 * searchInfo.CenterX + 10;
-				center[0] = 2 * searchInfo.CenterY - 10;
-				center[2] = 2 * searchInfo.CenterY + 10;
+				center[1] = (uint)(2 * searchInfo.CenterX - 10);
+				center[3] = (uint)(2 * searchInfo.CenterX + 10);
+				center[0] = (uint)(2 * searchInfo.CenterY - 10);
+				center[2] = (uint)(2 * searchInfo.CenterY + 10);
 
 				searchInfo.Score = 0;
-				float step = ModelInfo->StepAngle * pow(2, i);
+				float step = (float)(ModelInfo->StepAngle * pow(2, i));
 				float startAngle = searchInfo.Angle - step;
 				float endAngle = searchInfo.Angle + step;
 #ifdef RotateSearch
 
 #ifdef Paraller_RotateSearch
-				int index = ((int)(endAngle - startAngle) / step + 1);
+				int index = (int)((endAngle - startAngle) / step + 1);
 				Paraller_FindEdgeModel a(pyrSobelX[i],
 					pyrSobelY[i],
 					center,
@@ -593,7 +592,7 @@ int EdgeMatch::find_edge_model_path(IN cv::Mat& src, IN const char* modelID)
 
 void EdgeMatch::find_edge_model(IN cv::Mat& dstSobleX,
 	IN cv::Mat& dstSobleY,
-	IN uint* center,
+	IN int* center,
 	IN EdgeModelBaseInfo*& modelInfo,
 	IN float*& modelGradX,
 	IN float*& modelGradY,
@@ -603,7 +602,7 @@ void EdgeMatch::find_edge_model(IN cv::Mat& dstSobleX,
 	IN float& startAngle,
 	IN float& endAngle,
 	IN float& step,
-	IN float minScore, 
+	IN float minScore,
 	IN float greediness,
 	OUT EdgeModelSearchInfo& searchInfo)
 {
@@ -626,7 +625,7 @@ void EdgeMatch::find_edge_model(IN cv::Mat& dstSobleX,
 void EdgeMatch::rotateGradInfo(IN EdgeModelBaseInfo*& modelInfo, IN uint length, IN float angle,
 	OUT float*& modelGradX, OUT float*& modelGradY, OUT float*& modelContourX, OUT float*& modelContourY)
 {
-	float rotRad = angle * M_PI / 180;
+	float rotRad = (float)(angle * M_PI / 180);
 	float sinA = sin(rotRad);
 	float cosA = cos(rotRad);
 
@@ -644,7 +643,6 @@ void EdgeMatch::rotateGradInfo(IN EdgeModelBaseInfo*& modelInfo, IN uint length,
 	__m256 _contour_x = _mm256_set1_ps(0.0f);
 	__m256 _contour_y = _mm256_set1_ps(0.0f);
 
-	int count = length / SSEStep;
 	int count2 = length & (SSEStep - 1);
 	for (uint i = 0; i < length - count2; i += SSEStep)
 	{
@@ -696,8 +694,8 @@ void EdgeMatch::rotateGradInfo(IN EdgeModelBaseInfo*& modelInfo, IN uint length,
 #endif
 }
 
-void EdgeMatch::searchMatchModel(IN cv::Mat& dstSobleX, IN cv::Mat& dstSobleY, IN uint* center,
-	IN float minScore, IN float greediness, IN float angle, IN uint length,
+void EdgeMatch::searchMatchModel(IN cv::Mat& dstSobleX, IN cv::Mat& dstSobleY, IN int* center,
+	IN float minScore, IN float greediness, IN float angle, IN int length,
 	IN float*& modelGradX, IN float*& modelGradY, IN float*& modelContourX, IN float*& modelContourY,
 	OUT EdgeModelSearchInfo& searchInfo)
 {
@@ -714,31 +712,30 @@ void EdgeMatch::searchMatchModel(IN cv::Mat& dstSobleX, IN cv::Mat& dstSobleY, I
 		pSobleY = (short*)dstSobleY.ptr();
 	}
 
-	for (uint y = center[0]; y < center[2]; y++)
+	for (int y = center[0]; y < center[2]; y++)
 	{
-		for (uint x = center[1]; x < center[3]; x++)
+		for (int x = center[1]; x < center[3]; x++)
 		{
 			float partialScore = 0;
 			float score = 0;
-			uint sum = 0;
+			int sum = 0;
 
 #ifdef SSE	
-			__m256 _x = _mm256_set1_ps(x);
-			__m256 _y = _mm256_set1_ps(y);
+			__m256 _x = _mm256_set1_ps(x * 1.0f);
+			__m256 _y = _mm256_set1_ps(y * 1.0f);
 			__m256i _curX = _mm256_setzero_si256();
 			__m256i _curY = _mm256_setzero_si256();
 			__m256 _gx = _mm256_set1_ps(0.0f);
 			__m256 _gy = _mm256_set1_ps(0.0f);
 
-			int count = length / SSEStep;
 			int count2 = length & (SSEStep - 1);
-			for (uint index = 0; index < length - count2; index += SSEStep)
+			for (int index = 0; index < length - count2; index += SSEStep)
 			{
 				_curX = _mm256_cvttps_epi32(_mm256_add_ps(_x, _mm256_load_ps(modelContourX + index)));
 				_curY = _mm256_cvttps_epi32(_mm256_add_ps(_y, _mm256_load_ps(modelContourY + index)));
 
 				__m256i l = _mm256_add_epi32(_curX, _mm256_mullo_epi32(_curY, _mm256_set1_epi32(dstSobleX.cols)));
-				for (uchar k = 0; k < SSEStep; k++)
+				for (int k = 0; k < SSEStep; k++)
 				{
 					if (_curX.m256i_i32[k] < 0 || _curX.m256i_i32[k] > dstSobleX.cols - 1
 						|| _curY.m256i_i32[k] < 0 || _curY.m256i_i32[k] > dstSobleX.rows - 1)
@@ -765,7 +762,7 @@ void EdgeMatch::searchMatchModel(IN cv::Mat& dstSobleX, IN cv::Mat& dstSobleY, I
 				__m256 _grad = _mm256_sqrt_ps(_mm256_add_ps(_mm256_mul_ps(_gx, _gx), _mm256_mul_ps(_gy, _gy)));
 				__m256 _value = _mm256_div_ps(_graddot, _grad);
 
-				for (uchar k = 0; k < SSEStep; k++)
+				for (int k = 0; k < SSEStep; k++)
 				{
 					sum++;
 					if (abs(_gx.m256_f32[k]) > 1e-7 || abs(_gy.m256_f32[k]) > 1e-7)
@@ -777,11 +774,11 @@ void EdgeMatch::searchMatchModel(IN cv::Mat& dstSobleX, IN cv::Mat& dstSobleY, I
 						goto Next;
 				}
 			}
-			for (uint index = length - count2; index < length; index++)
+			for (int index = length - count2; index < length; index++)
 			{
 				sum++;
-				uint curX = x + modelContourX[index];
-				uint curY = y + modelContourY[index];
+				int curX = (int)(x + modelContourX[index]);
+				int curY = (int)(y + modelContourY[index]);
 
 				if (curX > dstSobleX.cols - 1 || curY > dstSobleX.rows - 1)
 					continue;
@@ -790,7 +787,7 @@ void EdgeMatch::searchMatchModel(IN cv::Mat& dstSobleX, IN cv::Mat& dstSobleY, I
 				float gy = 0;
 				if (pSobleX != nullptr)
 				{
-					uint l = curY * dstSobleX.cols + curX;
+					int l = curY * dstSobleX.cols + curX;
 					gx = pSobleX[l];
 					gy = pSobleY[l];
 				}
@@ -811,11 +808,11 @@ void EdgeMatch::searchMatchModel(IN cv::Mat& dstSobleX, IN cv::Mat& dstSobleY, I
 			}
 		Next:
 #else
-			for (uint index = 0; index < length; index++)
+			for (int index = 0; index < length; index++)
 			{
 				sum++;
-				int curX = x + modelContourX[index];
-				int curY = y + modelContourY[index];
+				int curX = (int)(x + modelContourX[index]);
+				int curY = (int)(y + modelContourY[index]);
 
 				if (curX < 0 || curX > dstSobleX.cols - 1 || curY < 0 || curY > dstSobleX.rows - 1)
 					continue;
@@ -852,8 +849,8 @@ void EdgeMatch::searchMatchModel(IN cv::Mat& dstSobleX, IN cv::Mat& dstSobleY, I
 				{
 					searchInfo.Score = score;
 					searchInfo.Angle = angle;
-					searchInfo.CenterX = x;
-					searchInfo.CenterY = y;
+					searchInfo.CenterX = x * 1.0f;
+					searchInfo.CenterY = y * 1.0f;
 				}
 			}
 		}
@@ -866,7 +863,7 @@ void EdgeMatch::drawContours(IN cv::Mat& img, IN float*& modelContourX, IN float
 	cv::Scalar color = cv::Scalar(0, 0, 255);
 	for (size_t i = 0; i < length; i++)
 	{
-		cv::Point point = cv::Point(searchInfo.CenterX + modelContourX[i], searchInfo.CenterY + modelContourY[i]);
+		cv::Point2f point = cv::Point2f(searchInfo.CenterX + modelContourX[i], searchInfo.CenterY + modelContourY[i]);
 		cv::line(img, point, point, color, 3, cv::LINE_AA);
 	}
 }
